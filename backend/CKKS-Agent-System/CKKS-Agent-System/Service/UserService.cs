@@ -7,6 +7,7 @@ using CKKS_Agent_System.Helper;
 using CKKS_Agent_System.Repository;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Options;
+using Org.BouncyCastle.Asn1.Ocsp;
 
 namespace CKKS_Agent_System.Service
 {
@@ -14,24 +15,25 @@ namespace CKKS_Agent_System.Service
     {
         private readonly UserRepository _userRepository;
         private readonly TokenService _tokenService;
+        private readonly IEmailService _emailService;
+        private readonly ISmsService _smsService;
         private readonly JwtSetting _jwtSetting;
         private readonly IDistributedCache _cache;
         private readonly ILogger<UserService> _logger;
 
-        // 定义允许的文件扩展名和最大文件大小常量
-        private readonly string[] _allowedExtensions = { ".jpg", ".jpeg", ".png", ".gif", ".webp" };
-        private const long MaxPictureAvatarSize = 2 * 1024 * 1024;
-        private const long MaxPictureWebsiteDecorationImageSize = 20 * 1024 * 1024;
-
         public UserService(
             UserRepository userRepository, 
             TokenService tokenService,
+            IEmailService emailService,
+            ISmsService smsService,
             IOptions<JwtSetting> options, 
             IDistributedCache cache,
             ILogger<UserService> logger)
         {
             _userRepository = userRepository;
             _tokenService = tokenService;
+            _emailService = emailService;
+            _smsService = smsService;
             _jwtSetting = options.Value;
             _cache = cache;
             _logger = logger;
@@ -181,23 +183,33 @@ namespace CKKS_Agent_System.Service
 
             // 生成验证码并存入 Redis
             var code = VerifyCodeHelper.GenerateCode();
+
+
+            // 发送验证码
+            if (request.Type == VerifyType.Email)
+            {
+                await SendVerifyCodeByEmail(target, code);
+            }
+            else
+            {
+                var sendSuccess = await SendVerifyCodeByPhoneNumber(target, code);
+                if (!sendSuccess)
+                {
+                    return new ApiResponse
+                    {
+                        Success = false,
+                        Message = "短信发送失败",
+                        Code = ResponseCode.InternalError
+                    };
+                }
+            }
+
+            // 确定验证码发送成功后，存入 Redis 并设置过期时间（5 分钟）
             await VerifyCodeHelper.SaveCodeAsync(_cache, target, code, "Register");
 
             // 写入防刷冷却锁，60秒过期
             var options = new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(60) };
             await _cache.SetStringAsync(cooldownKey, "1", options);
-
-            // 发送验证码（这里先模拟）
-            if (request.Type == VerifyType.Email)
-            {
-                // await _emailService.SendAsync(request.Email, $"您的注册验证码是：{code}");
-                Console.WriteLine($"[模拟发送邮箱] 收件人：{target}，验证码：{code}");
-            }
-            else
-            {
-                // await _smsService.SendAsync(request.PhoneNumber, code);
-                Console.WriteLine($"[模拟发送短信] 收件人：{target}，验证码：{code}");
-            }
 
             return new ApiResponse 
             { 
@@ -387,6 +399,36 @@ namespace CKKS_Agent_System.Service
         public bool IsPasswordMatched(string inputPassword, string storedPasswordHash)
         {
             return PasswordHelper.VerifyPassword(inputPassword, storedPasswordHash);
+        }
+
+        // 向目标邮箱发送验证码
+        public async Task SendVerifyCodeByEmail(string email, string code)
+        {
+            var subject = "【CKKS Agent System】注册验证码";
+
+            // 准备替换的变量字典
+            var variables = new Dictionary<string, string>
+            {
+                { "CODE", code } // 对应 HTML 里的 {{CODE}}
+            };
+
+            // 调用模板发送方法，传入模板文件名
+            await _emailService.SendTemplateEmailAsync(email, subject, "email-verify.html", variables);
+        }
+
+        // 向目标手机发送验证码
+        public async Task<bool> SendVerifyCodeByPhoneNumber(string phoneNumber, string code)
+        {
+            try
+            {
+                var result = await _smsService.SendVerificationCodeAsync(phoneNumber, code);
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "发送短信验证码失败，手机号: {PhoneNumber}", phoneNumber);
+                throw;
+            }
         }
     }
 }

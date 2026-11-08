@@ -91,9 +91,21 @@ builder.Services.AddStackExchangeRedisCache(options =>
     options.InstanceName = "CKKS_Agent_"; // 给缓存加个前缀，防止多个项目混用
 });
 
+// 注册邮件服务的配置
+builder.Services.Configure<EmailSetting>(
+    builder.Configuration.GetSection(EmailSetting.SectionName));
+
+// 注册短信服务的配置
+builder.Services.Configure<AliyunSmsSetting>(
+    builder.Configuration.GetSection(AliyunSmsSetting.SectionName));
+
+// 注册短信服务
+builder.Services.AddScoped<ISmsService, AliyunSmsService>();
+
 // 注册自定义服务层
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<TokenService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
 
 // 注册自定义仓储层
 builder.Services.AddScoped<UserRepository>();
