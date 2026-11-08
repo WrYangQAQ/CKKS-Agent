@@ -1,0 +1,16 @@
+<Application x:Class="CKKS_Agent.Wpf.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml">
+  <Application.Resources>
+    <SolidColorBrush x:Key="AccentBrush" Color="#1D5FD2" />
+    <SolidColorBrush x:Key="MutedBrush" Color="#64748B" />
+    <Style TargetType="Button">
+      <Setter Property="Padding" Value="16,9" />
+      <Setter Property="Margin" Value="0" />
+      <Setter Property="BorderThickness" Value="0" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+  </Application.Resources>
+</Application>

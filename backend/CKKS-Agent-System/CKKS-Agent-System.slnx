@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="CKKS-Agent-System/CKKS-Agent-System.csproj" />
+  <Project Path="../../frontend/CKKS-Agent.Wpf/CKKS-Agent.Wpf.csproj" />
+</Solution>
