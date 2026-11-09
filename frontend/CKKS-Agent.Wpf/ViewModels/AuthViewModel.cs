@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Threading;
 using CKKS_Agent.Wpf.Models;
 using CKKS_Agent.Wpf.Services;
 
@@ -10,9 +11,11 @@ namespace CKKS_Agent.Wpf.ViewModels;
 public sealed class AuthViewModel : INotifyPropertyChanged
 {
     private readonly UserApiClient _api = new();
+    private readonly DispatcherTimer _codeCountdownTimer;
 
     private bool _isLoginMode = true;
     private bool _isBusy;
+    private int _codeCountdownSeconds;
     private string _identifier = "";
     private string _loginPassword = "";
     private string _registerUsername = "";
@@ -98,9 +101,12 @@ public sealed class AuthViewModel : INotifyPropertyChanged
     {
         LoginCommand = new AsyncCommand(LoginAsync, () => CanSubmit);
         RegisterCommand = new AsyncCommand(RegisterAsync, () => CanSubmit);
-        SendCodeCommand = new AsyncCommand(SendCodeAsync, () => !_isBusy);
+        SendCodeCommand = new AsyncCommand(SendCodeAsync, () => !_isBusy && _codeCountdownSeconds == 0);
         LogoutCommand = new AsyncCommand(LogoutAsync);
         SwitchModeCommand = new RelayCommand(SwitchMode);
+
+        _codeCountdownTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _codeCountdownTimer.Tick += OnCodeCountdownTick;
     }
 
     private async Task LoginAsync()
@@ -153,16 +159,43 @@ public sealed class AuthViewModel : INotifyPropertyChanged
             Target = VerificationTarget.Trim()
         });
         SetBusy(false);
-        SendCodeText = "发送验证码";
 
         if (response.Success)
         {
             Success(response.Message);
+            StartCodeCountdown();
         }
         else
         {
             Error(response.Message);
+            SendCodeText = "发送验证码";
         }
+    }
+
+    private void StartCodeCountdown()
+    {
+        _codeCountdownSeconds = 60;
+        SendCodeText = $"重新发送（{_codeCountdownSeconds}s）";
+        ((AsyncCommand)SendCodeCommand).RaiseCanExecuteChanged();
+        _codeCountdownTimer.Start();
+    }
+
+    private void OnCodeCountdownTick(object? sender, EventArgs e)
+    {
+        _codeCountdownSeconds--;
+
+        if (_codeCountdownSeconds <= 0)
+        {
+            _codeCountdownSeconds = 0;
+            _codeCountdownTimer.Stop();
+            SendCodeText = "发送验证码";
+        }
+        else
+        {
+            SendCodeText = $"重新发送（{_codeCountdownSeconds}s）";
+        }
+
+        ((AsyncCommand)SendCodeCommand).RaiseCanExecuteChanged();
     }
 
     private async Task RegisterAsync()
