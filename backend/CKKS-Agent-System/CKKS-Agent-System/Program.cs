@@ -1,6 +1,7 @@
 using CKKS_Agent_System.Config;
 using CKKS_Agent_System.Service;
 using CKKS_Agent_System.Repository;
+using CKKS_Agent_System.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -120,6 +121,9 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+// 启用全局异常处理中间件
+app.UseMiddleware<GlobalExceptionMiddleware>();
 
 // 启用认证与授权中间件
 app.UseAuthentication();

@@ -44,7 +44,7 @@ namespace CKKS_Agent_System.Controller
             if (!ModelState.IsValid)
             {
                 var errorMsg = ModelState.Values.SelectMany(v => v.Errors).FirstOrDefault()?.ErrorMessage;
-                return BadRequest(new ApiResponse { Success = false, Message = errorMsg ?? "参数错误" });
+                return ReturnResponse(new ApiResponse { Success = false, Message = errorMsg ?? "参数错误" });
             }
 
             var response = await _userService.RegisterAsync(request);
