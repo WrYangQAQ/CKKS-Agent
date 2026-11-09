@@ -1,12 +1,12 @@
 # CKKS-Agent
 
-面向 CKKS 同态加密参数自动化配置的毕业设计项目。项目目标是让 Agent 根据密文推理场景规划候选参数，并通过确定性的安全校验与实际性能评估筛选配置，降低手工调参的门槛。仓库仍处于开发阶段：目前主要实现了用户认证相关的后端基础功能，以及 WPF 前端的头像上传界面；Agent 寻优、Microsoft SEAL 评估与 128-bit 安全边界校验尚未在本仓库实现。
+面向 CKKS 同态加密参数自动化配置的毕业设计项目。项目目标是让 Agent 根据密文推理场景规划候选参数，并通过确定性的安全校验与实际性能评估筛选配置，降低手工调参的门槛。仓库仍处于开发阶段：目前主要实现了用户认证相关的后端基础功能，以及 WPF 前端的登录、注册界面；Agent 寻优、Microsoft SEAL 评估与 128-bit 安全边界校验尚未在本仓库实现。
 
 ## 当前进度
 
 - 后端：注册、登录、验证码发送、Access Token 刷新与登出接口；使用 SQL Server 保存用户和刷新令牌，Redis 保存验证码及发送冷却状态。
 - 验证码：支持邮件模板发送和阿里云短信发送，验证码有效期为 5 分钟。使用邮件或短信需要自行配置对应服务的有效凭据。
-- 前端：基于 WPF 的头像上传界面和客户端校验。后端尚无 `POST /api/user/avatar` 接口，因此头像上传的完整链路暂不可用。
+- 前端：基于 WPF 的登录、验证码注册、登出和会话信息界面，已对接用户 API。头像上传功能尚未接入当前界面；后端也尚无 `POST /api/user/avatar` 接口。
 
 规划中的功能包括模型上传与结构解析、Agent 参数搜索、静态安全剪枝、基于 Microsoft SEAL 的 CKKS 密文性能评估、128-bit 安全约束拦截、搜索过程审计及结果可视化。这些属于设计目标，不代表当前版本已经提供。
 
@@ -38,7 +38,7 @@ dotnet run --project .\backend\CKKS-Agent-System\CKKS-Agent-System\CKKS-Agent-Sy
 dotnet run --project .\frontend\CKKS-Agent.Wpf\CKKS-Agent.Wpf.csproj
 ```
 
-前端的头像上传说明见 [`frontend/CKKS-Agent.Wpf/README.md`](frontend/CKKS-Agent.Wpf/README.md)。该界面仍需后端头像接口接入，详见 [`backend/AVATAR_UPLOAD_GUIDE.md`](backend/AVATAR_UPLOAD_GUIDE.md)。
+前端运行说明见 [`frontend/CKKS-Agent.Wpf/README.md`](frontend/CKKS-Agent.Wpf/README.md)。头像上传的后端接口设计清单见 [`backend/AVATAR_UPLOAD_GUIDE.md`](backend/AVATAR_UPLOAD_GUIDE.md)。
 
 ## 当前 API
 
