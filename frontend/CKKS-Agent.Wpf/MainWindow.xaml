@@ -9,21 +9,103 @@
     MinHeight="720"
     MinWidth="1080"
     WindowStartupLocation="CenterScreen"
+    WindowStyle="None"
     Background="#FCFCFB"
     FontFamily="Microsoft YaHei UI">
+    <WindowChrome.WindowChrome>
+        <WindowChrome
+            CaptionHeight="44"
+            ResizeBorderThickness="6"
+            GlassFrameThickness="0"
+            CornerRadius="0"
+            UseAeroCaptionButtons="False"/>
+    </WindowChrome.WindowChrome>
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="44"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <!-- 顶部标题栏 -->
+        <!-- 顶部标题栏：整条可拖动，右侧为窗口按钮 -->
         <Border BorderBrush="#E1E3E6" BorderThickness="0,0,0,1">
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="28,0">
-                <TextBlock Text="◇" FontSize="25" Margin="0,-3,15,0"/>
-                <TextBlock Text="CKKS System" FontSize="18"/>
-                <TextBlock Text="v0.1.0" FontSize="14" Foreground="#858991" Margin="24,2,0,0"/>
-            </StackPanel>
+            <Grid>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="28,0">
+                    <Image
+                        Source="/wwwroot/logo/logo.png"
+                        Width="24"
+                        Height="24"
+                        Margin="0,0,13,0"
+                        VerticalAlignment="Center"
+                        RenderOptions.BitmapScalingMode="HighQuality"/>
+                    <TextBlock Text="CKKS System" FontSize="18"/>
+                </StackPanel>
+                <StackPanel
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Stretch">
+                    <Button
+                        Style="{StaticResource CaptionButton}"
+                        WindowChrome.IsHitTestVisibleInChrome="True"
+                        Click="OnMinimizeClick"
+                        ToolTip="最小化">
+                        <Rectangle
+                            Width="10"
+                            Height="1"
+                            Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"/>
+                    </Button>
+                    <Button
+                        Style="{StaticResource CaptionButton}"
+                        WindowChrome.IsHitTestVisibleInChrome="True"
+                        Click="OnMaximizeClick"
+                        ToolTip="最大化 / 还原">
+                        <Grid Width="10" Height="10">
+                            <Path
+                                Data="M0.5,0.5 H9.5 V9.5 H0.5 Z"
+                                Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                StrokeThickness="1">
+                                <Path.Style>
+                                    <Style TargetType="Path">
+                                        <Style.Triggers>
+                                            <DataTrigger
+                                                Binding="{Binding WindowState, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                Value="Maximized">
+                                                <Setter Property="Visibility" Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Path.Style>
+                            </Path>
+                            <Path
+                                Data="M2.5,0.5 H9.5 V7.5 H7.5 M7.5,2.5 V9.5 H0.5 V2.5 Z"
+                                Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                StrokeThickness="1">
+                                <Path.Style>
+                                    <Style TargetType="Path">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                        <Style.Triggers>
+                                            <DataTrigger
+                                                Binding="{Binding WindowState, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                Value="Maximized">
+                                                <Setter Property="Visibility" Value="Visible"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Path.Style>
+                            </Path>
+                        </Grid>
+                    </Button>
+                    <Button
+                        Style="{StaticResource CaptionCloseButton}"
+                        WindowChrome.IsHitTestVisibleInChrome="True"
+                        Click="OnCloseClick"
+                        ToolTip="关闭">
+                        <Path
+                            Data="M0.5,0.5 L9.5,9.5 M9.5,0.5 L0.5,9.5"
+                            Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                            StrokeThickness="1"/>
+                    </Button>
+                </StackPanel>
+            </Grid>
         </Border>
 
         <!-- 未登录页面：左侧装饰背景 + 右侧登录/注册表单 -->
@@ -34,13 +116,36 @@
             </Grid.ColumnDefinitions>
             <Border BorderBrush="#E1E3E6" BorderThickness="0,0,1,0">
                 <Grid>
-                    <Canvas Opacity=".65">
+                    <!-- 左侧装饰仅在该面板内绘制，避免元素越过分栏线 -->
+                    <Canvas Opacity=".65" ClipToBounds="True">
                         <Ellipse Canvas.Left="165" Canvas.Top="135" Width="260" Height="260" Stroke="#B9BEC5"/>
                         <Ellipse Canvas.Left="202" Canvas.Top="172" Width="186" Height="186" Stroke="#B9BEC5"/>
                         <Ellipse Canvas.Left="246" Canvas.Top="216" Width="98" Height="98" Stroke="#B9BEC5"/>
                         <Line X1="125" Y1="265" X2="425" Y2="265" Stroke="#838991"/>
                         <Line X1="286" Y1="125" X2="286" Y2="405" Stroke="#838991"/>
                         <Ellipse Canvas.Left="281" Canvas.Top="260" Width="10" Height="10" Fill="#555B63"/>
+                        <!-- 斜置等边三角形：与辅助线保持相同的低对比度灰色 -->
+                        <Canvas Canvas.Left="475" Canvas.Top="475" Width="100" Height="100">
+                            <Polygon
+                                Points="10,56 50,32 10,8"
+                                Stroke="#A7ADB5"
+                                StrokeThickness="1"
+                                Fill="Transparent">
+                                <Polygon.RenderTransform>
+                                    <RotateTransform Angle="-18" CenterX="30" CenterY="32"/>
+                                </Polygon.RenderTransform>
+                            </Polygon>
+                            <Polygon
+                                Points="36,82 76,58 36,34"
+                                Stroke="#A7ADB5"
+                                StrokeThickness="1"
+                                Fill="Transparent"
+                                Opacity="0.58">
+                                <Polygon.RenderTransform>
+                                    <RotateTransform Angle="-18" CenterX="56" CenterY="58"/>
+                                </Polygon.RenderTransform>
+                            </Polygon>
+                        </Canvas>
                         <Line X1="140" Y1="700" X2="410" Y2="700" Stroke="#A7ADB5"/>
                         <Ellipse Canvas.Left="290" Canvas.Top="687" Width="26" Height="26" Stroke="#A7ADB5"/>
                     </Canvas>
@@ -55,7 +160,7 @@
                 </Grid>
             </Border>
             <Grid Grid.Column="1">
-                <StackPanel Width="610" VerticalAlignment="Center">
+                <StackPanel Width="420" VerticalAlignment="Center">
                     <TextBlock
                         Text="{Binding AuthTitle}"
                         FontSize="54"
