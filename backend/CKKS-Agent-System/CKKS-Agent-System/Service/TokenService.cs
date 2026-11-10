@@ -102,7 +102,7 @@ namespace CKKS_Agent_System.Service
         }
 
         // 持久化 Refresh Token
-        public async Task<bool> PersistRefreshToken(long userId, string refreshToken)
+        public async Task<bool> PersistRefreshTokenAsync(long userId, string refreshToken)
         {
             var token = new RefreshToken
             {
@@ -112,7 +112,7 @@ namespace CKKS_Agent_System.Service
                 ExpiresAt = DateTime.UtcNow.AddDays(_jwtSetting.RefreshTokenExpireDays)
             };
 
-            return await _tokenRepository.AddRefreshToken(token);
+            return await _tokenRepository.AddRefreshTokenAsync(token);
         }
 
         // 验证 Refresh Token 是否有效
@@ -123,19 +123,19 @@ namespace CKKS_Agent_System.Service
         }
 
         // 注销 Refresh Token
-        public async Task<bool> RevokeRefreshToken(string tokenHash)
+        public async Task<bool> RevokeRefreshTokenAsync(string tokenHash)
         {
-            var token = await _tokenRepository.GetRefreshTokenByHash(tokenHash);
+            var token = await _tokenRepository.GetRefreshTokenByHashAsync(tokenHash);
             if (token != null && IsRefreshTokenActive(token))
             {
                 token.RevokedAt = DateTime.UtcNow;
-                return await _tokenRepository.UpdateRefreshToken(token);
+                return await _tokenRepository.UpdateRefreshTokenAsync(token);
             }
             return false;
         }
 
         // 给用户轮换 Refresh Token（撤销旧的，生成新的）
-        public async Task<RotateRefreshTokenDto> RotateRefreshToken(RefreshToken oldToken)
+        public async Task<RotateRefreshTokenDto> RotateRefreshTokenAsync(RefreshToken oldToken)
         {
             // 生成新的 Refresh Token
             string newTokenString = GenerateRefreshToken();
@@ -152,7 +152,7 @@ namespace CKKS_Agent_System.Service
             oldToken.ReplacedByTokenId = newToken.Id;
 
             // 持久化两个 Token 的状态
-            bool rotateSuccess = await _tokenRepository.RotateRefreshToken(oldToken, newToken);
+            bool rotateSuccess = await _tokenRepository.RotateRefreshTokenAsync(oldToken, newToken);
             if (rotateSuccess)
             {
                 return new RotateRefreshTokenDto
@@ -168,7 +168,7 @@ namespace CKKS_Agent_System.Service
         }
 
         // 给用户刷新短期令牌 Access Token
-        public async Task<ApiResponse> RefreshAccessToken(string? refreshToken)
+        public async Task<ApiResponse> RefreshAccessTokenAsync(string? refreshToken)
         {
             // 检查 refreshToken 是否为空
             if (string.IsNullOrWhiteSpace(refreshToken))
@@ -183,7 +183,7 @@ namespace CKKS_Agent_System.Service
 
             // 验证 refreshToken 是否有效
             var tokenHash = HashHelper.ComputeSHA256Hash(refreshToken);
-            var storedToken = await _tokenRepository.GetRefreshTokenByHash(tokenHash);
+            var storedToken = await _tokenRepository.GetRefreshTokenByHashAsync(tokenHash);
 
             if (storedToken == null || DateTime.UtcNow >= storedToken.ExpiresAt)
             {
@@ -208,12 +208,12 @@ namespace CKKS_Agent_System.Service
             }
 
             // 查出用户信息，生成新的 AccessToken
-            var user = await _userRepository.GetUserById(storedToken.UserId);
+            var user = await _userRepository.GetUserByIdAsync(storedToken.UserId);
             if (user == null)
             {
                 return new ApiResponse { Success = false, Message = "用户不存在" };
             }
-            var rotateResult = await RotateRefreshToken(storedToken);
+            var rotateResult = await RotateRefreshTokenAsync(storedToken);
             var newAccessToken = GenerateShortTermToken(user);
 
             if (rotateResult == null || string.IsNullOrWhiteSpace(rotateResult.TokenPlaintext))

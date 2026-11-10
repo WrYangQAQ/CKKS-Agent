@@ -1,5 +1,10 @@
 namespace CKKS_Agent.Wpf.Models;
 
+public sealed class AvatarUploadResult
+{
+    public string AvatarUrl { get; set; } = "";
+}
+
 public sealed class ApiResponse<T>
 {
     public bool Success { get; set; }

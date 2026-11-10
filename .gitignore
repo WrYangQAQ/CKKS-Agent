@@ -32,3 +32,4 @@ logs/
 # OS files
 .DS_Store
 Thumbs.db
+/backend/CKKS-Agent-System/CKKS-Agent-System/sixlabors.lic

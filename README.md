@@ -6,7 +6,7 @@
 
 - 后端：注册、登录、验证码发送、Access Token 刷新与登出接口；使用 SQL Server 保存用户和刷新令牌，Redis 保存验证码及发送冷却状态。
 - 验证码：支持邮件模板发送和阿里云短信发送，验证码有效期为 5 分钟。使用邮件或短信需要自行配置对应服务的有效凭据。
-- 前端：基于 WPF 的登录、验证码注册、登出和会话信息界面，已对接用户 API。头像上传功能尚未接入当前界面；后端也尚无 `POST /api/user/avatar` 接口。
+- 前端：基于 WPF 的登录、验证码注册、登出、会话信息和头像上传界面，已对接用户 API。头像上传支持 JPG、JPEG、PNG，最大 2 MB。
 
 规划中的功能包括模型上传与结构解析、Agent 参数搜索、静态安全剪枝、基于 Microsoft SEAL 的 CKKS 密文性能评估、128-bit 安全约束拦截、搜索过程审计及结果可视化。这些属于设计目标，不代表当前版本已经提供。
 
@@ -38,7 +38,7 @@ dotnet run --project .\backend\CKKS-Agent-System\CKKS-Agent-System\CKKS-Agent-Sy
 dotnet run --project .\frontend\CKKS-Agent.Wpf\CKKS-Agent.Wpf.csproj
 ```
 
-前端运行说明见 [`frontend/CKKS-Agent.Wpf/README.md`](frontend/CKKS-Agent.Wpf/README.md)。头像上传的后端接口设计清单见 [`backend/AVATAR_UPLOAD_GUIDE.md`](backend/AVATAR_UPLOAD_GUIDE.md)。
+前端运行说明见 [`frontend/CKKS-Agent.Wpf/README.md`](frontend/CKKS-Agent.Wpf/README.md)。头像上传接口为 `POST /api/user/upload-avatar`，需要 Bearer Token，表单文件字段为 `file`。
 
 ## 当前 API
 
@@ -51,6 +51,7 @@ dotnet run --project .\frontend\CKKS-Agent.Wpf\CKKS-Agent.Wpf.csproj
 | POST | `/register` | 用户注册 |
 | POST | `/refresh` | 刷新访问令牌 |
 | POST | `/logout` | 撤销刷新令牌 |
+| POST | `/upload-avatar` | 登录后上传头像 |
 
 接口的请求和响应结构以 `backend/CKKS-Agent-System/CKKS-Agent-System/DTO/` 中的类型为准。开发环境下还启用了 ASP.NET Core OpenAPI 文档端点。
 

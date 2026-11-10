@@ -100,6 +100,10 @@ builder.Services.Configure<EmailSetting>(
 builder.Services.Configure<AliyunSmsSetting>(
     builder.Configuration.GetSection(AliyunSmsSetting.SectionName));
 
+// 注册文件上传配置
+builder.Services.Configure<FileUploadOption>(
+    builder.Configuration.GetSection(FileUploadOption.SectionName));
+
 // 注册短信服务
 builder.Services.AddScoped<ISmsService, AliyunSmsService>();
 
@@ -128,6 +132,9 @@ app.UseMiddleware<GlobalExceptionMiddleware>();
 // 启用认证与授权中间件
 app.UseAuthentication();
 app.UseAuthorization();
+
+// 启用静态文件中间件，允许访问 wwwroot 下的文件
+app.UseStaticFiles();
 
 app.MapControllers();
 

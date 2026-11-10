@@ -1,8 +1,11 @@
+using System.IO;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using Microsoft.Win32;
 using CKKS_Agent.Wpf.Models;
 using CKKS_Agent.Wpf.Services;
 
@@ -28,6 +31,9 @@ public sealed class AuthViewModel : INotifyPropertyChanged
     private string _sendCodeText = "发送验证码";
     private Brush _statusBrush = Brushes.Firebrick;
     private UserInfo _currentUser = new();
+    private string? _selectedAvatarPath;
+    private ImageSource? _avatarPreview;
+    private bool _isUploadingAvatar;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -85,6 +91,11 @@ public sealed class AuthViewModel : INotifyPropertyChanged
         ? "U"
         : CurrentUser.Username[..1].ToUpperInvariant();
 
+    public ImageSource? AvatarPreview { get => _avatarPreview; private set { _avatarPreview = value; Raise(); } }
+    public bool CanUploadAvatar => _selectedAvatarPath is not null && !_isUploadingAvatar;
+    public ICommand SelectAvatarCommand { get; }
+    public ICommand UploadAvatarCommand { get; }
+
     public string SendCodeText { get => _sendCodeText; private set { _sendCodeText = value; Raise(); } }
     public string StatusMessage { get => _statusMessage; private set { _statusMessage = value; Raise(); } }
     public Brush StatusBrush { get => _statusBrush; private set { _statusBrush = value; Raise(); } }
@@ -104,6 +115,8 @@ public sealed class AuthViewModel : INotifyPropertyChanged
         SendCodeCommand = new AsyncCommand(SendCodeAsync, () => !_isBusy && _codeCountdownSeconds == 0);
         LogoutCommand = new AsyncCommand(LogoutAsync);
         SwitchModeCommand = new RelayCommand(SwitchMode);
+        SelectAvatarCommand = new RelayCommand(SelectAvatar);
+        UploadAvatarCommand = new AsyncCommand(UploadAvatarAsync, () => CanUploadAvatar);
 
         _codeCountdownTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _codeCountdownTimer.Tick += OnCodeCountdownTick;
@@ -246,6 +259,10 @@ public sealed class AuthViewModel : INotifyPropertyChanged
         }
 
         AuthSession.Clear();
+        _selectedAvatarPath = null;
+        AvatarPreview = null;
+        Raise(nameof(CanUploadAvatar));
+        ((AsyncCommand)UploadAvatarCommand).RaiseCanExecuteChanged();
         IsAuthenticated = false;
         CurrentUser = new UserInfo();
         Identifier = "";
@@ -253,6 +270,67 @@ public sealed class AuthViewModel : INotifyPropertyChanged
         StatusMessage = "";
         Raise(nameof(IsAuthenticated));
         Raise(nameof(IsAnonymous));
+    }
+
+    private void SelectAvatar()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Filter = "JPEG 或 PNG 图片|*.jpg;*.jpeg;*.png",
+            CheckFileExists = true,
+            Multiselect = false
+        };
+        if (dialog.ShowDialog() != true) return;
+        try
+        {
+            var path = dialog.FileName;
+            var extension = Path.GetExtension(path).ToLowerInvariant();
+            if (extension is not (".jpg" or ".jpeg" or ".png")) throw new InvalidDataException("只支持 JPG、JPEG、PNG 图片。");
+            var length = new FileInfo(path).Length;
+            if (length == 0 || length > 2 * 1024 * 1024) throw new InvalidDataException("图片必须大于 0 字节，且不超过 2 MB。");
+            using var stream = File.OpenRead(path);
+            Span<byte> header = stackalloc byte[8];
+            if (stream.Read(header) < 8) throw new InvalidDataException("图片文件不完整。");
+            var jpeg = header[0] == 0xff && header[1] == 0xd8 && header[2] == 0xff;
+            var png = header.SequenceEqual(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 });
+            if (extension == ".png" ? !png : !jpeg) throw new InvalidDataException("图片内容与文件格式不匹配。");
+            stream.Position = 0;
+            var image = new BitmapImage();
+            image.BeginInit();
+            image.CacheOption = BitmapCacheOption.OnLoad;
+            image.DecodePixelWidth = 512;
+            image.StreamSource = stream;
+            image.EndInit();
+            image.Freeze();
+            AvatarPreview = image;
+            _selectedAvatarPath = path;
+            Success("图片已选好，点击“保存头像”上传。");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.IO.FileFormatException or NotSupportedException)
+        {
+            Error($"无法选择图片：{ex.Message}");
+        }
+        Raise(nameof(CanUploadAvatar));
+        ((AsyncCommand)UploadAvatarCommand).RaiseCanExecuteChanged();
+    }
+
+    private async Task UploadAvatarAsync()
+    {
+        if (_selectedAvatarPath is null || string.IsNullOrWhiteSpace(AuthSession.AccessToken)) { Error("请重新登录后再上传头像。"); return; }
+        _isUploadingAvatar = true;
+        Raise(nameof(CanUploadAvatar));
+        ((AsyncCommand)UploadAvatarCommand).RaiseCanExecuteChanged();
+        var response = await _api.UploadAvatarAsync(_selectedAvatarPath, AuthSession.AccessToken);
+        _isUploadingAvatar = false;
+        if (response.Success && response.Data is { AvatarUrl.Length: > 0 })
+        {
+            CurrentUser.AvatarUrl = response.Data.AvatarUrl;
+            _selectedAvatarPath = null;
+            Success("头像已保存。");
+        }
+        else Error(response.Message);
+        Raise(nameof(CanUploadAvatar));
+        ((AsyncCommand)UploadAvatarCommand).RaiseCanExecuteChanged();
     }
 
     private void SwitchMode()

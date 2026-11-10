@@ -349,13 +349,18 @@
                                 CornerRadius="41"
                                 HorizontalAlignment="Left"
                                 Margin="0,30,0,22">
-                                <TextBlock
-                                    Text="{Binding UserInitial}"
-                                    Foreground="White"
-                                    FontSize="32"
-                                    VerticalAlignment="Center"
-                                    HorizontalAlignment="Center"/>
+                                <Grid ClipToBounds="True">
+                                    <TextBlock Text="{Binding UserInitial}" Foreground="White" FontSize="32"
+                                               VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                                    <Image Source="{Binding AvatarPreview}" Stretch="UniformToFill"/>
+                                </Grid>
                             </Border>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                <Button Content="选择图片" Command="{Binding SelectAvatarCommand}" Style="{StaticResource Outline}"/>
+                                <Button Content="保存头像" Command="{Binding UploadAvatarCommand}" IsEnabled="{Binding CanUploadAvatar}"
+                                        Style="{StaticResource Outline}" Margin="10,0,0,0"/>
+                            </StackPanel>
+                            <TextBlock Text="JPG、JPEG、PNG，最大 2 MB" Foreground="#858A92" Margin="0,0,0,18"/>
                             <TextBlock Text="{Binding CurrentUser.Username}" FontSize="25"/>
                             <TextBlock Text="已安全登录 CKKS System" Foreground="#868B94" Margin="0,8,0,28"/>
                             <Separator/>

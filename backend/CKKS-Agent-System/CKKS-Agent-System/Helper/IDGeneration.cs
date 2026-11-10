@@ -27,8 +27,6 @@ namespace CKKS_Agent_System.Helper
         private const long SequenceMask = -1L ^ (-1L << SequenceBits);                // 4095
 
         // 默认机器 ID 和数据中心 ID
-        // 注意：如果是分布式多台服务器部署，每台机器需要配置不同的 WorkerId，否则会生成重复ID！
-        // 单机部署保持 1 即可。实际企业项目中通常从配置文件或 Redis/Zookeeper 读取。
         private const long WorkerId = 1L;
         private const long DatacenterId = 1L;
 
@@ -39,17 +37,14 @@ namespace CKKS_Agent_System.Helper
         // 线程锁，保证高并发下的线程安全
         private static readonly object _lock = new object();
 
-        /// <summary>
-        /// 生成一个雪花ID (返回long类型)
-        /// </summary>
-        /// <returns>全局唯一的长整型ID</returns>
+        // 生成一个雪花ID (返回long类型)
         public static long NextId()
         {
             lock (_lock)
             {
                 long timestamp = GetCurrentTimestamp();
 
-                // 1. 时钟回拨处理（系统时间被人为调早或NTP同步导致）
+                // 时钟回拨处理
                 if (timestamp < _lastTimestamp)
                 {
                     long offset = _lastTimestamp - timestamp;
@@ -67,7 +62,7 @@ namespace CKKS_Agent_System.Helper
                     }
                 }
 
-                // 2. 如果是同一毫秒内生成的ID
+                // 如果是同一毫秒内生成的ID
                 if (_lastTimestamp == timestamp)
                 {
                     _sequence = (_sequence + 1) & SequenceMask;
@@ -86,7 +81,7 @@ namespace CKKS_Agent_System.Helper
 
                 _lastTimestamp = timestamp;
 
-                // 3. 拼接64位ID并返回
+                // 拼接64位ID并返回
                 return ((timestamp - Twepoch) << TimestampLeftShift)
                        | (DatacenterId << DatacenterIdShift)
                        | (WorkerId << WorkerIdShift)
@@ -94,17 +89,13 @@ namespace CKKS_Agent_System.Helper
             }
         }
 
-        /// <summary>
-        /// 获取当前时间戳（毫秒）
-        /// </summary>
+        // 获取当前时间戳（毫秒）
         private static long GetCurrentTimestamp()
         {
             return (long)(DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)).TotalMilliseconds;
         }
 
-        /// <summary>
-        /// 阻塞等待到下一毫秒
-        /// </summary>
+        // 阻塞等待到下一毫秒
         private static long WaitNextMillis(long lastTimestamp)
         {
             long timestamp = GetCurrentTimestamp();

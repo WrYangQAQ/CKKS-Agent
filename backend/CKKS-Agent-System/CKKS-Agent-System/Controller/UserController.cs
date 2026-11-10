@@ -3,7 +3,9 @@ using CKKS_Agent_System.DTO;
 using CKKS_Agent_System.Enum;
 using CKKS_Agent_System.Helper;
 using CKKS_Agent_System.Service;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Net.WebSockets;
 
 namespace CKKS_Agent_System.Controller
 {
@@ -55,7 +57,7 @@ namespace CKKS_Agent_System.Controller
         [HttpPost("refresh")]
         public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest request)
         {
-            var response = await _tokenService.RefreshAccessToken(request.RefreshToken);
+            var response = await _tokenService.RefreshAccessTokenAsync(request.RefreshToken);
             return ReturnResponse(response);
         }
 
@@ -64,7 +66,7 @@ namespace CKKS_Agent_System.Controller
         public async Task<IActionResult> Logout([FromBody] LogoutRequest request)
         {
             var tokenHash = HashHelper.ComputeSHA256Hash(request.RefreshToken);
-            await _tokenService.RevokeRefreshToken(tokenHash);   // 数据库挂了就让异常正常抛出
+            await _tokenService.RevokeRefreshTokenAsync(tokenHash);   // 数据库挂了就让异常正常抛出
 
             return ReturnResponse(new ApiResponse
             {
@@ -72,6 +74,27 @@ namespace CKKS_Agent_System.Controller
                 Message = "登出成功",
                 Code = ResponseCode.Success
             });
+        }
+
+        // 用户头像上传接口
+        [Authorize]
+        [HttpPost("upload-avatar")]
+        public async Task<IActionResult> UploadAvatar([FromForm] IFormFile file)
+        {
+            var userId = GetUserIdFromClaims();
+            var response = await _userService.UploadAvatarAsync(userId, file);
+            return ReturnResponse(response);
+        }
+
+        // ==============  以下是私有工具方法  ==============
+        private long GetUserIdFromClaims()
+        {
+            var userIdClaim = User.Claims.FirstOrDefault(c => c.Type == "UserId");
+            if (userIdClaim == null || !long.TryParse(userIdClaim.Value, out long userId))
+            {
+                throw new UnauthorizedAccessException("用户未登录或令牌无效");
+            }
+            return userId;
         }
     }
 }

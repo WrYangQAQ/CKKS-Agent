@@ -18,8 +18,15 @@ namespace CKKS_Agent_System.Service
         private readonly IEmailService _emailService;
         private readonly ISmsService _smsService;
         private readonly JwtSetting _jwtSetting;
+        private readonly FileUploadOption _uploadOption;
         private readonly IDistributedCache _cache;
         private readonly ILogger<UserService> _logger;
+
+        // 允许上传的图片文件后缀
+        private static readonly HashSet<string> AllowedExtensions = new(StringComparer.OrdinalIgnoreCase)
+        {
+            ".jpg", ".jpeg", ".png"
+        };
 
         public UserService(
             UserRepository userRepository, 
@@ -27,6 +34,7 @@ namespace CKKS_Agent_System.Service
             IEmailService emailService,
             ISmsService smsService,
             IOptions<JwtSetting> options, 
+            IOptions<FileUploadOption> uploadOption,
             IDistributedCache cache,
             ILogger<UserService> logger)
         {
@@ -35,6 +43,7 @@ namespace CKKS_Agent_System.Service
             _emailService = emailService;
             _smsService = smsService;
             _jwtSetting = options.Value;
+            _uploadOption = uploadOption.Value;
             _cache = cache;
             _logger = logger;
         }
@@ -77,9 +86,9 @@ namespace CKKS_Agent_System.Service
             // 根据登录类型，一次性查出用户
             User? userFinded = request.LoginType switch
             {
-                LoginType.Username => await _userRepository.GetUserByUsername(identifier),
-                LoginType.PhoneNumber => await _userRepository.GetUserByPhoneNumber(identifier),
-                LoginType.Email => await _userRepository.GetUserByEmail(identifier),
+                LoginType.Username => await _userRepository.GetUserByUsernameAsync(identifier),
+                LoginType.PhoneNumber => await _userRepository.GetUserByPhoneNumberAsync(identifier),
+                LoginType.Email => await _userRepository.GetUserByEmailAsync(identifier),
                 _ => null
             };
 
@@ -99,7 +108,7 @@ namespace CKKS_Agent_System.Service
 
             // 生成长期 RefreshToken 并持久化
             var longTermToken = _tokenService.GenerateRefreshToken();
-            bool persistSuccess = await _tokenService.PersistRefreshToken(userFinded.UserId, longTermToken);
+            bool persistSuccess = await _tokenService.PersistRefreshTokenAsync(userFinded.UserId, longTermToken);
 
             if (!persistSuccess)
             {
@@ -154,8 +163,8 @@ namespace CKKS_Agent_System.Service
             // 查询数据库中是否已存在该邮箱或手机号
             var existingUser = request.Type switch
             {
-                VerifyType.Email => await _userRepository.GetUserByEmail(target),
-                VerifyType.PhoneNumber => await _userRepository.GetUserByPhoneNumber(target),
+                VerifyType.Email => await _userRepository.GetUserByEmailAsync(target),
+                VerifyType.PhoneNumber => await _userRepository.GetUserByPhoneNumberAsync(target),
                 _ => null
             };
 
@@ -188,11 +197,11 @@ namespace CKKS_Agent_System.Service
             // 发送验证码
             if (request.Type == VerifyType.Email)
             {
-                await SendVerifyCodeByEmail(target, code);
+                await SendVerifyCodeByEmailAsync(target, code);
             }
             else
             {
-                var sendSuccess = await SendVerifyCodeByPhoneNumber(target, code);
+                var sendSuccess = await SendVerifyCodeByPhoneNumberAsync(target, code);
                 if (!sendSuccess)
                 {
                     return new ApiResponse
@@ -247,7 +256,7 @@ namespace CKKS_Agent_System.Service
             request.Email = VerificationTargetHelper.NormalizeEmail(request.Email);
 
             // 检查用户名、邮箱、手机号是否已存在
-            var existingUserByUsername = await _userRepository.GetUserByUsername(request.Username);
+            var existingUserByUsername = await _userRepository.GetUserByUsernameAsync(request.Username);
             if (existingUserByUsername != null)
             {
                 return new ApiResponse
@@ -260,7 +269,7 @@ namespace CKKS_Agent_System.Service
 
             if (request.Type == VerifyType.Email)
             {
-                var existingUserByEmail = await _userRepository.GetUserByEmail(request.Email!);
+                var existingUserByEmail = await _userRepository.GetUserByEmailAsync(request.Email!);
                 if (existingUserByEmail != null)
                 {
                     return new ApiResponse
@@ -273,7 +282,7 @@ namespace CKKS_Agent_System.Service
             }
             else
             {
-                var existingUserByPhoneNumber = await _userRepository.GetUserByPhoneNumber(request.PhoneNumber!);
+                var existingUserByPhoneNumber = await _userRepository.GetUserByPhoneNumberAsync(request.PhoneNumber!);
                 if (existingUserByPhoneNumber != null)
                 {
                     return new ApiResponse
@@ -317,7 +326,7 @@ namespace CKKS_Agent_System.Service
                 user.Email = null;
                 user.IsPhoneNumberVerified = true;
             }
-            bool addSuccess = await _userRepository.AddUser(user);
+            bool addSuccess = await _userRepository.AddUserAsync(user);
 
             if (!addSuccess)
             {
@@ -342,48 +351,118 @@ namespace CKKS_Agent_System.Service
         // 用户上传头像
         public async Task<ApiResponse> UploadAvatarAsync(long userId, IFormFile file)
         {
+            // 检查文件是否为空
             if (file == null || file.Length == 0)
-                return new ApiResponse { Success = false, Message = "请选择要上传的文件" };
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "请选择要上传的文件",
+                    Code = ResponseCode.FileProcessingFailed
+                };
+            }
 
-            // 限制文件大小（比如最大 2MB）
-            if (file.Length > 2 * 1024 * 1024)
-                return new ApiResponse { Success = false, Message = "图片大小不能超过 2MB" };
+            // 限制文件大小
+            if (file.Length > _uploadOption.AvatarUploadFileSize * 1024 * 1024)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "图片大小不能超过 " + _uploadOption.AvatarUploadFileSize + "MB",
+                    Code = ResponseCode.FileTooLarge
+                };
+            }
 
-            // 限制文件类型（防止上传木马脚本）
-            var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif" };
+
+            // 限制文件类型
             var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
-            if (!allowedExtensions.Contains(extension))
-                return new ApiResponse { Success = false, Message = "只支持 jpg, png, gif 格式的图片" };
+            if (!AllowedExtensions.Contains(extension))
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "只支持 jpg, png, jpeg 格式的图片",
+                    Code = ResponseCode.InvalidFileType
+                };
+            }
+            var safeExtension = extension == ".jpeg" ? ".jpg" : extension;
 
-            // 重命名文件（用雪花 ID 或 Guid 生成新的文件名）
-            var newFileName = $"{IDGeneration.NextId()}{extension}";
+            // 用雪花 ID 生成新的文件名
+            var newFileName = $"{IDGeneration.NextId()}{safeExtension}";
 
-            // 确定保存的物理路径（比如保存到 wwwroot/Avatars 目录下）
+            // 确定保存的物理路径
             var uploadDir = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "Avatars");
             if (!Directory.Exists(uploadDir))
             {
                 Directory.CreateDirectory(uploadDir);
             }
-
             var filePath = Path.Combine(uploadDir, newFileName);
 
-            // 保存文件到硬盘
-            using (var stream = new FileStream(filePath, FileMode.Create))
+            // 对上传图片进行安全验证和重新编码，防止伪造文件上传恶意脚本
+            using var inputStream = file.OpenReadStream();
+            using var safeOutputStream = new MemoryStream();
+
+            bool isSafeImage = await ImageValidatorHelper.ValidateAndReencodeAsync(inputStream, safeOutputStream, extension);
+
+            if (!isSafeImage)
             {
-                await file.CopyToAsync(stream);
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "文件损坏或包含非法内容，请上传真实的图片",
+                    Code = ResponseCode.InvalidFileContent
+                };
+            }
+
+            // 保存文件到硬盘
+            safeOutputStream.Position = 0; // 重置流指针到开头
+            using (var fileStream = new FileStream(filePath, FileMode.Create))
+            {
+                await safeOutputStream.CopyToAsync(fileStream);
             }
 
             // 构造可供前端访问的 URL 路径
             var avatarUrl = $"/Avatars/{newFileName}";
 
             // 更新数据库中的 User 实体
-            var user = await _userRepository.GetUserById(userId);
-            if (user == null) return new ApiResponse { Success = false, Message = "用户不存在" };
+            var user = await _userRepository.GetUserByIdAsync(userId);
+            if (user == null)
+            {
+                // 删除已上传的头像文件
+                DeleteFile(filePath);
 
-            // （可选）如果你想顺便删掉旧头像，可以在这里写 File.Delete(旧路径) 的逻辑
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "用户不存在",
+                    Code = ResponseCode.UserNotFound
+                };
+            }
+
+            // 在更新数据库中的 User 实体之前，先获取旧头像的 URL，以便在更新成功后删除旧头像文件
+            var oldAvatarUrl = user.AvatarUrl;
 
             user.AvatarUrl = avatarUrl;
-            await _userRepository.UpdateUser(user);
+            bool updateSuccess = await _userRepository.UpdateUserAsync(user);
+            if (!updateSuccess)
+            {
+                // 删除已上传的头像文件
+                DeleteFile(filePath);
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "头像上传失败，请稍后再试",
+                    Code = ResponseCode.DatabaseError
+                };
+            }
+
+            // 在更新用户头像成功后删掉用户之前的头像文件
+            if (!string.IsNullOrEmpty(oldAvatarUrl) && oldAvatarUrl.StartsWith("/Avatars/"))
+            {
+                var oldFileName = Path.GetFileName(oldAvatarUrl);
+                var oldFilePath = Path.Combine(uploadDir, oldFileName);
+                DeleteFile(oldFilePath);
+            }
 
             return new ApiResponse
             {
@@ -402,7 +481,7 @@ namespace CKKS_Agent_System.Service
         }
 
         // 向目标邮箱发送验证码
-        public async Task SendVerifyCodeByEmail(string email, string code)
+        public async Task SendVerifyCodeByEmailAsync(string email, string code)
         {
             var subject = "【CKKS Agent System】注册验证码";
 
@@ -417,7 +496,7 @@ namespace CKKS_Agent_System.Service
         }
 
         // 向目标手机发送验证码
-        public async Task<bool> SendVerifyCodeByPhoneNumber(string phoneNumber, string code)
+        public async Task<bool> SendVerifyCodeByPhoneNumberAsync(string phoneNumber, string code)
         {
             try
             {
@@ -428,6 +507,22 @@ namespace CKKS_Agent_System.Service
             {
                 _logger.LogError(ex, "发送短信验证码失败，手机号: {PhoneNumber}", phoneNumber);
                 throw;
+            }
+        }
+
+        // 删除目标地址文件
+        public void DeleteFile(string filePath)
+        {
+            if (File.Exists(filePath))
+            {
+                try
+                {
+                    File.Delete(filePath);
+                }
+                catch
+                {
+                    // 忽略删除失败的情况
+                }
             }
         }
     }
