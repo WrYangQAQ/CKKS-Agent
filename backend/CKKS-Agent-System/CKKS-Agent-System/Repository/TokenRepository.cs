@@ -68,13 +68,11 @@ namespace CKKS_Agent_System.Repository
         // 按照 userId 注销用户所有的 RefreshToken
         public async Task<bool> RevokeAllUserTokensAsync(long userId)
         {
-            var tokens = await SearchRefreshTokensByUserIdAsync(userId);
-            foreach (var token in tokens)
-            {
-                token.RevokedAt = DateTime.UtcNow;
-            }
-            int affectedRows = await _dbContext.SaveChangesAsync();
-            return affectedRows == tokens.Count;
+            var now = DateTime.UtcNow;
+            await _dbContext.RefreshTokens
+                .Where(t => t.UserId == userId && t.RevokedAt == null)
+                .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, now));
+            return true; // 没有需要撤销的也算成功
         }
 
     }

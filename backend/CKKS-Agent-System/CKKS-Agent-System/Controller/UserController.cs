@@ -6,6 +6,7 @@ using CKKS_Agent_System.Service;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Net.WebSockets;
+using System.Security.Claims;
 
 namespace CKKS_Agent_System.Controller
 {
@@ -24,23 +25,23 @@ namespace CKKS_Agent_System.Controller
 
         // 登录接口
         [HttpPost("login")]
-        public async Task<IActionResult> Login([FromBody] LoginRequest request)
+        public async Task<IActionResult> LoginAsync([FromBody] LoginRequest request)
         {
             var response = await _userService.LoginAsync(request);
             return ReturnResponse(response);
         }
 
-        // 发送验证码接口
-        [HttpPost("send-code")]
-        public async Task<IActionResult> SendRegisterCode([FromBody] SendCodeRequest request)
+        // 发送注册验证码接口
+        [HttpPost("register/send-code")]
+        public async Task<IActionResult> SendRegisterCodeAsync([FromBody] SendCodeRequest request)
         {
-            var response = await _userService.SendCodeAsync(request);
+            var response = await _userService.SendRegisterCodeAsync(request);
             return ReturnResponse(response);
         }
 
         // 用户注册接口
         [HttpPost("register")]
-        public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+        public async Task<IActionResult> RegisterAsync([FromBody] RegisterRequest request)
         {
             // 模型验证（[Required] 等特性自动触发）
             if (!ModelState.IsValid)
@@ -55,7 +56,7 @@ namespace CKKS_Agent_System.Controller
 
         // 用户令牌刷新接口
         [HttpPost("refresh")]
-        public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest request)
+        public async Task<IActionResult> RefreshAsync([FromBody] RefreshTokenRequest request)
         {
             var response = await _tokenService.RefreshAccessTokenAsync(request.RefreshToken);
             return ReturnResponse(response);
@@ -63,7 +64,7 @@ namespace CKKS_Agent_System.Controller
 
         // 登出接口
         [HttpPost("logout")]
-        public async Task<IActionResult> Logout([FromBody] LogoutRequest request)
+        public async Task<IActionResult> LogoutAsync([FromBody] LogoutRequest request)
         {
             var tokenHash = HashHelper.ComputeSHA256Hash(request.RefreshToken);
             await _tokenService.RevokeRefreshTokenAsync(tokenHash);   // 数据库挂了就让异常正常抛出
@@ -79,21 +80,46 @@ namespace CKKS_Agent_System.Controller
         // 用户头像上传接口
         [Authorize]
         [HttpPost("upload-avatar")]
-        public async Task<IActionResult> UploadAvatar([FromForm] IFormFile file)
+        public async Task<IActionResult> UploadAvatarAsync([FromForm] IFormFile file)
         {
             var userId = GetUserIdFromClaims();
             var response = await _userService.UploadAvatarAsync(userId, file);
             return ReturnResponse(response);
         }
 
+        // 发送修改密码验证码接口
+        [Authorize]
+        [HttpPost("reset-password/send-code")]
+        public async Task<IActionResult> SendResetPasswordCodeAsync([FromBody] SendCodeRequest request)
+        {
+            long userId = GetUserIdFromClaims();
+            var response = await _userService.SendResetPasswordCodeAsync(request, userId);
+            return ReturnResponse(response);
+        }
+
+        // 用户修改密码接口
+        [Authorize]
+        [HttpPost("reset-password")]
+        public async Task<IActionResult> ResetPasswordAsync([FromBody] ResetPasswordRequest request)
+        {
+            var userId = GetUserIdFromClaims();
+            var response = await _userService.ResetPasswordAsync(request, userId);
+            return ReturnResponse(response);
+        }
+
         // ==============  以下是私有工具方法  ==============
         private long GetUserIdFromClaims()
         {
-            var userIdClaim = User.Claims.FirstOrDefault(c => c.Type == "UserId");
+            // 兼容：映射后的长名、JWT 标准短名、以及历史遗留的自定义名
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)
+                           ?? User.FindFirst("sub")
+                           ?? User.FindFirst("UserId");
+
             if (userIdClaim == null || !long.TryParse(userIdClaim.Value, out long userId))
             {
                 throw new UnauthorizedAccessException("用户未登录或令牌无效");
             }
+
             return userId;
         }
     }

@@ -236,5 +236,11 @@ namespace CKKS_Agent_System.Service
                 Data = dto 
             };
         }
+
+        // 注销用户的所有 Refresh Token
+        public async Task<bool> RevokeAllRefreshToken(long userId)
+        {
+            return await _tokenRepository.RevokeAllUserTokensAsync(userId);
+        }
     }
 }

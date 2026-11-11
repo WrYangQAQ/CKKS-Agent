@@ -34,7 +34,7 @@ public sealed class UserApiClient
         => PostAsync<RegisterRequest, object>("register", request);
 
     public Task<ApiResponse<object>> SendCodeAsync(SendCodeRequest request)
-        => PostAsync<SendCodeRequest, object>("send-code", request);
+        => PostAsync<SendCodeRequest, object>("register/send-code", request);
 
     public Task<ApiResponse<object>> LogoutAsync(LogoutRequest request)
         => PostAsync<LogoutRequest, object>("logout", request);

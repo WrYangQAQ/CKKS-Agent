@@ -47,11 +47,13 @@ dotnet run --project .\frontend\CKKS-Agent.Wpf\CKKS-Agent.Wpf.csproj
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |
 | POST | `/login` | 用户登录 |
-| POST | `/send-code` | 向邮箱或手机号发送注册验证码 |
+| POST | `/register/send-code` | 向邮箱或手机号发送注册验证码 |
 | POST | `/register` | 用户注册 |
 | POST | `/refresh` | 刷新访问令牌 |
 | POST | `/logout` | 撤销刷新令牌 |
 | POST | `/upload-avatar` | 登录后上传头像 |
+| POST | `/reset-password/send-code` | 登录后发送修改密码验证码 |
+| POST | `/reset-password` | 登录后凭验证码修改密码 |
 
 接口的请求和响应结构以 `backend/CKKS-Agent-System/CKKS-Agent-System/DTO/` 中的类型为准。开发环境下还启用了 ASP.NET Core OpenAPI 文档端点。
 
