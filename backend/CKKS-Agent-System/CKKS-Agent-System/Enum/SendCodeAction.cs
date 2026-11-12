@@ -5,8 +5,8 @@
         Register,
         ResetPassword,
         ResetEmail,
-        ResetPhone,
+        ResetPhoneNumber,
         BindEmail,
-        BindPhone,
+        BindPhoneNumber,
     }
 }

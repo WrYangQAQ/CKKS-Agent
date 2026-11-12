@@ -127,6 +127,26 @@ namespace CKKS_Agent_System.Controller
             return ReturnResponse(response);
         }
 
+        // 单独绑定手机号验证码发送接口
+        [Authorize]
+        [HttpPost("bind-phone/send-code")]
+        public async Task<IActionResult> SendBindPhoneNumberCodeAsync([FromBody] SendCodeRequest request)
+        {
+            var userId = GetUserIdFromClaims();
+            var response = await _userService.SendBindPhoneNumberCodeAsync(request, userId);
+            return ReturnResponse(response);
+        }
+
+        // 绑定手机接口
+        [Authorize]
+        [HttpPost("bind-phone")]
+        public async Task<IActionResult> BindPhoneNumberAsync([FromBody] BindPhoneNumberRequest request)
+        {
+            long userId = GetUserIdFromClaims();
+            var response = await _userService.BindPhoneNumberAsync(request, userId);
+            return ReturnResponse(response);
+        }
+
         // ==============  以下是私有工具方法  ==============
         private long GetUserIdFromClaims()
         {

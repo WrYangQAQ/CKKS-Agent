@@ -4,7 +4,7 @@
 
 ## 当前进度
 
-- 后端：注册、登录、验证码发送、Access Token 刷新、登出、密码修改和绑定邮箱接口；使用 SQL Server 保存用户和刷新令牌，Redis 保存验证码及发送冷却状态。绑定邮箱目前仅提供后端 API，前端界面尚未接入。
+- 后端：注册、登录、验证码发送、Access Token 刷新、登出、密码修改及绑定邮箱、手机号接口；使用 SQL Server 保存用户和刷新令牌，Redis 保存验证码及发送冷却状态。绑定联系方式目前仅提供后端 API，前端界面尚未接入。
 - 验证码：支持邮件模板发送和阿里云短信发送，验证码有效期为 5 分钟。使用邮件或短信需要自行配置对应服务的有效凭据。
 - 前端：基于 WPF 的登录、验证码注册、登出、会话信息和头像上传界面，已对接用户 API。头像上传支持 JPG、JPEG、PNG，最大 2 MB。
 
@@ -56,6 +56,8 @@ dotnet run --project .\frontend\CKKS-Agent.Wpf\CKKS-Agent.Wpf.csproj
 | POST | `/reset-password` | 登录后凭验证码修改密码 |
 | POST | `/bind-email/send-code` | 登录后向待绑定邮箱发送验证码 |
 | POST | `/bind-email` | 登录后凭验证码绑定邮箱 |
+| POST | `/bind-phone/send-code` | 登录后向待绑定手机号发送验证码 |
+| POST | `/bind-phone` | 登录后凭验证码绑定手机号 |
 
 接口的请求和响应结构以 `backend/CKKS-Agent-System/CKKS-Agent-System/DTO/` 中的类型为准。开发环境下还启用了 ASP.NET Core OpenAPI 文档端点。
 

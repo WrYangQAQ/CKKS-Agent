@@ -11,4 +11,14 @@ namespace CKKS_Agent_System.DTO
         [Required]
         public string VerificationCode { get; set; } = string.Empty;
     }
+
+    public class BindPhoneNumberRequest
+    {
+        [Required(ErrorMessage = "请填写手机号！")]
+        [Phone]
+        public string PhoneNumber { get; set; } = string.Empty;
+
+        [Required]
+        public string VerificationCode { get; set; } = string.Empty;
+    }
 }

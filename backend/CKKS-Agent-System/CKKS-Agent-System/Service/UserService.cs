@@ -818,7 +818,7 @@ namespace CKKS_Agent_System.Service
             }
 
             // 校验用户邮箱是否有空位
-            if (currentUser.IsEmailVerified || currentUser.Email != null)
+            if (currentUser.IsEmailVerified || !string.IsNullOrWhiteSpace(currentUser.Email))
             {
                 return new ApiResponse
                 {
@@ -898,7 +898,7 @@ namespace CKKS_Agent_System.Service
         public async Task<ApiResponse> BindEmailAsync(BindEmailRequest request, long userId)
         {
             var target = VerificationTargetHelper.NormalizeEmail(request.Email);
-            if (target == null)
+            if (string.IsNullOrWhiteSpace(target))
             {
                 return new ApiResponse
                 {
@@ -921,7 +921,7 @@ namespace CKKS_Agent_System.Service
             }
 
             // 校验用户邮箱是否有空位
-            if (currentUser.IsEmailVerified || currentUser.Email != null)
+            if (currentUser.IsEmailVerified || !string.IsNullOrWhiteSpace(currentUser.Email))
             {
                 return new ApiResponse
                 {
@@ -996,7 +996,210 @@ namespace CKKS_Agent_System.Service
             };
         }
 
+        // 单独绑定手机号发送验证码
+        public async Task<ApiResponse> SendBindPhoneNumberCodeAsync(SendCodeRequest request, long userId)
+        {
+            // 校验请求类型
+            if (request.Type != VerifyType.PhoneNumber)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "您正在访问错误的接口，请重试",
+                    Code = ResponseCode.UnsupportedVerifyType
+                };
+            }
+
+            // 校验用户存在
+            var currentUser = await _userRepository.GetUserByIdAsync(userId);
+            if (currentUser == null)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "当前用户不存在，请重新登录试试",
+                    Code = ResponseCode.UserNotFound
+                };
+            }
+
+            // 校验用户手机号是否有空位
+            if (currentUser.IsPhoneNumberVerified || !string.IsNullOrWhiteSpace(currentUser.PhoneNumber))
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "当前用户已经绑定了一个手机号码",
+                    Code = ResponseCode.Conflict
+                };
+            }
+
+            var target = VerificationTargetHelper.Normalize(request.Type, request.Target);
+            if (target == null)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "请输入您想要绑定的手机号码",
+                    Code = ResponseCode.BadRequest
+                };
+            }
+
+            // 校验目标手机号是否已被其它用户占用
+            var existingUser = await _userRepository.GetUserByPhoneNumberAsync(target);
+            if (existingUser != null)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "该手机号已被其它用户绑定了",
+                    Code = ResponseCode.Conflict
+                };
+            }
+
+            // 检查冷却锁
+            var cooldownKey = $"VerifyCode:Cooldown:{SendCodeAction.BindPhoneNumber.ToString()}:{currentUser.UserId}:{target}";
+            if (await _cache.GetStringAsync(cooldownKey) != null)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "发送过于频繁，请 1 分钟后再试",
+                    Code = ResponseCode.TooManyVerifyCode
+                };
+            }
+
+            // 生成验证码
+            var code = VerifyCodeHelper.GenerateCode();
+
+            // 发送验证码
+            bool sendSuccess = await SendVerifyCodeByPhoneNumberAsync(target, code);
+            if (!sendSuccess)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "验证码短信发送失败",
+                    Code = ResponseCode.InternalError
+                };
+            }
+
+            // 将验证码写入 Redis 并设置过期时间 5 min
+            var codeKeyTarget = $"{userId}:{target}";
+            await VerifyCodeHelper.SaveCodeAsync(_cache, codeKeyTarget, code, SendCodeAction.BindPhoneNumber.ToString());
+
+            // 写入防刷冷却锁，60秒过期
+            var options = new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(60) };
+            await _cache.SetStringAsync(cooldownKey, "1", options);
+
+            return new ApiResponse
+            {
+                Success = true,
+                Message = "验证码发送成功",
+                Code = ResponseCode.Success
+            };
+        }
+
         // 未绑定手机号用户绑定手机号（单独绑定）
+        public async Task<ApiResponse> BindPhoneNumberAsync(BindPhoneNumberRequest request, long userId)
+        {
+            var target = VerificationTargetHelper.NormalizePhoneNumber(request.PhoneNumber);
+            if (string.IsNullOrWhiteSpace(target))
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "请输入您想要绑定的手机号码",
+                    Code = ResponseCode.BadRequest
+                };
+            }
+
+            // 校验用户存在
+            var currentUser = await _userRepository.GetUserByIdAsync(userId);
+            if (currentUser == null)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "当前用户不存在，请重新登录试试",
+                    Code = ResponseCode.UserNotFound
+                };
+            }
+
+            // 校验用户手机号是否有空位
+            if (currentUser.IsPhoneNumberVerified || !string.IsNullOrWhiteSpace(currentUser.PhoneNumber))
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "当前用户已经绑定了一个手机号",
+                    Code = ResponseCode.Conflict
+                };
+            }
+
+            // 校验目标手机号是否已被其它用户占用
+            var existingUser = await _userRepository.GetUserByPhoneNumberAsync(target);
+            if (existingUser != null)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "该手机号已被其它用户绑定了",
+                    Code = ResponseCode.Conflict
+                };
+            }
+
+            // 校验验证码是否正确
+            var codeKeyTarget = $"{userId}:{target}";
+            var verifiedSuccess = await VerifyCodeHelper.ValidateCodeAsync(
+                _cache,
+                codeKeyTarget,
+                request.VerificationCode,
+                SendCodeAction.BindPhoneNumber.ToString());
+
+            if (!verifiedSuccess)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "验证码错误或已过期",
+                    Code = ResponseCode.InvalidVerificationCode
+                };
+            }
+
+            // 将新手机号入库保存
+            try
+            {
+                currentUser.PhoneNumber = target;
+                currentUser.IsPhoneNumberVerified = true;
+                bool updateSuccess = await _userRepository.UpdateUserAsync(currentUser);
+                if (!updateSuccess)
+                {
+                    return new ApiResponse
+                    {
+                        Success = false,
+                        Message = "在保存的过程中出错了",
+                        Code = ResponseCode.DatabaseError
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "保存手机号失败。UserId={UserId}", userId);
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "在保存的过程中出错了",
+                    Code = ResponseCode.DatabaseError
+                };
+            }
+
+            return new ApiResponse
+            {
+                Success = true,
+                Message = "手机号绑定成功",
+                Code = ResponseCode.Success
+            };
+        }
 
         // ============== 以下是私有工具方法 ==============
 
@@ -1015,9 +1218,9 @@ namespace CKKS_Agent_System.Service
                 SendCodeAction.Register => ("【CKKS Agent System】注册验证码", "email-verify.html"),
                 SendCodeAction.ResetPassword => ("【CKKS Agent System】重置密码验证码", "email-reset-password.html"),
                 SendCodeAction.ResetEmail => ("【CKKS Agent System】更换邮箱验证码", "email-reset-email.html"),
-                SendCodeAction.ResetPhone => ("【CKKS Agent System】更换手机号验证码", "email-reset-phone.html"),
+                SendCodeAction.ResetPhoneNumber => ("【CKKS Agent System】更换手机号验证码", "email-reset-phone.html"),
                 SendCodeAction.BindEmail => ("【CKKS Agent System】绑定邮箱验证码", "email-bind-email.html"),
-                SendCodeAction.BindPhone => ("【CKKS Agent System】绑定手机号验证码", "email-bind-phone.html"),
+                SendCodeAction.BindPhoneNumber => ("【CKKS Agent System】绑定手机号验证码", "email-bind-phone.html"),
                 _ => throw new NotSupportedException($"不支持的验证码场景：{action}")
             };
 
