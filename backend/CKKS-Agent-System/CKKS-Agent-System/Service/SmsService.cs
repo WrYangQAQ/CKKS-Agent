@@ -18,11 +18,13 @@ namespace CKKS_Agent_System.Service
     public class AliyunSmsService : ISmsService
     {
         private readonly AliyunSmsSetting _settings;
+        private readonly VerificationSetting _verificationSetting;
         private readonly ILogger<AliyunSmsService> _logger;
 
-        public AliyunSmsService(IOptions<AliyunSmsSetting> options, ILogger<AliyunSmsService> logger)
+        public AliyunSmsService(IOptions<AliyunSmsSetting> options, IOptions<VerificationSetting> verificationOptions, ILogger<AliyunSmsService> logger)
         {
             _settings = options.Value;
+            _verificationSetting = verificationOptions.Value;
             _logger = logger;
         }
 
@@ -45,7 +47,7 @@ namespace CKKS_Agent_System.Service
                 var templateParam = new
                 {
                     code = code,
-                    min = VerifyCodeHelper.CodeExpirationMinutes.ToString()
+                    min = _verificationSetting.CodeExpirationMinutes.ToString()
                 };
                 string jsonParam = JsonSerializer.Serialize(templateParam);
 

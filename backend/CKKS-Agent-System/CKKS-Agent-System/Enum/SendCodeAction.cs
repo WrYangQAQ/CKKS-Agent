@@ -6,6 +6,8 @@
         ResetPassword,
         ResetEmail,
         ResetPhoneNumber,
+        ResetAuthByEmail,
+        ResetAuthByPhoneNumber,
         BindEmail,
         BindPhoneNumber,
     }

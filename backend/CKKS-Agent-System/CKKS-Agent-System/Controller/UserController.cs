@@ -147,6 +147,46 @@ namespace CKKS_Agent_System.Controller
             return ReturnResponse(response);
         }
 
+        // 用户修改绑定时的用户认证验证码发送接口
+        [Authorize]
+        [HttpPost("reset-identity-auth/send-code")]
+        public async Task<IActionResult> SendResetAuthCodeAsync([FromBody] SendResetIndentiyAuthCodeRequest request)
+        {
+            long userId = GetUserIdFromClaims();
+            var response = await _userService.SendResetIdentityAuthCodeAsync(request, userId);
+            return ReturnResponse(response);
+        }
+
+        // 用户修改绑定时的用户认证接口
+        [Authorize]
+        [HttpPost("reset-identity-auth")]
+        public async Task<IActionResult> ResetAuthAsync([FromBody] ResetIndentiyAuthRequest request)
+        {
+            long userId = GetUserIdFromClaims();
+            var response = await _userService.ResetIdentityAuthAsync(request, userId);
+            return ReturnResponse(response);
+        }
+
+        // 用户换绑时的验证码发送接口
+        [Authorize]
+        [HttpPost("reset-identity/send-code")]
+        public async Task<IActionResult> SendResetIdentityCodeAsync([FromBody] SendCodeRequest request)
+        {
+            long userId = GetUserIdFromClaims();
+            var response = await _userService.SendResetIdentityCodeAsync(request, userId);
+            return ReturnResponse(response);
+        }
+
+        // 用户换绑
+        [Authorize]
+        [HttpPost("reset-identity")]
+        public async Task<IActionResult> ResetIdentityAsync([FromBody] ResetIdentityRequest request)
+        {
+            long userId = GetUserIdFromClaims();
+            var response = await _userService.ResetIdentityAsync(request, userId);
+            return ReturnResponse(response);
+        }
+
         // ==============  以下是私有工具方法  ==============
         private long GetUserIdFromClaims()
         {

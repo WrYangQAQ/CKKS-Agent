@@ -7,8 +7,6 @@ namespace CKKS_Agent_System.Helper
     {
         private const string Chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
 
-        public const int CodeExpirationMinutes = 5; // 验证码有效期，单位：分钟
-
         // 生成 6 位随机验证码
         public static string GenerateCode(int length = 6)
         {
@@ -23,12 +21,12 @@ namespace CKKS_Agent_System.Helper
             });
         }
 
-        // 保存验证码到 Redis（设置 5 分钟过期）
-        public static async Task SaveCodeAsync(IDistributedCache cache, string target, string code, string action)
+        // 保存验证码到 Redis
+        public static async Task SaveCodeAsync(IDistributedCache cache, string target, string code, string action, int expirationMinutes)
         {
             var options = new DistributedCacheEntryOptions
             {
-                AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(CodeExpirationMinutes) // 5分钟过期
+                AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(expirationMinutes)
             };
             // 存进 Redis，Key 是 "VerifyCode:Register:邮箱或手机号"
             await cache.SetStringAsync($"VerifyCode:{action}:{target}", code, options);

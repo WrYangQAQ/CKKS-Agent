@@ -104,6 +104,10 @@ builder.Services.Configure<AliyunSmsSetting>(
 builder.Services.Configure<FileUploadOption>(
     builder.Configuration.GetSection(FileUploadOption.SectionName));
 
+// 注册Code过期与刷新频率配置
+builder.Services.Configure<VerificationSetting>(
+    builder.Configuration.GetSection(VerificationSetting.SectionName));
+
 // 注册短信服务
 builder.Services.AddScoped<ISmsService, AliyunSmsService>();
 

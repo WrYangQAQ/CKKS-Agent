@@ -1,5 +1,4 @@
-﻿using Azure.Core;
-using CKKS_Agent_System.Config;
+﻿using CKKS_Agent_System.Config;
 using CKKS_Agent_System.DTO;
 using CKKS_Agent_System.Entity;
 using CKKS_Agent_System.Enum;
@@ -7,7 +6,6 @@ using CKKS_Agent_System.Helper;
 using CKKS_Agent_System.Repository;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Options;
-using Org.BouncyCastle.Asn1.X509;
 
 namespace CKKS_Agent_System.Service
 {
@@ -19,6 +17,7 @@ namespace CKKS_Agent_System.Service
         private readonly ISmsService _smsService;
         private readonly JwtSetting _jwtSetting;
         private readonly FileUploadOption _uploadOption;
+        private readonly VerificationSetting _verificationSetting;
         private readonly IDistributedCache _cache;
         private readonly ILogger<UserService> _logger;
 
@@ -35,6 +34,7 @@ namespace CKKS_Agent_System.Service
             ISmsService smsService,
             IOptions<JwtSetting> options, 
             IOptions<FileUploadOption> uploadOption,
+            IOptions<VerificationSetting> verificationOptions,
             IDistributedCache cache,
             ILogger<UserService> logger)
         {
@@ -44,6 +44,7 @@ namespace CKKS_Agent_System.Service
             _smsService = smsService;
             _jwtSetting = options.Value;
             _uploadOption = uploadOption.Value;
+            _verificationSetting = verificationOptions.Value;
             _cache = cache;
             _logger = logger;
         }
@@ -185,7 +186,7 @@ namespace CKKS_Agent_System.Service
                 return new ApiResponse
                 {
                     Success = false,
-                    Message = "发送过于频繁，请 1 分钟后再试",
+                    Message = $"发送过于频繁，请 {_verificationSetting.CooldownSeconds} 秒后再试",
                     Code = ResponseCode.TooManyVerifyCode
                 };
             }
@@ -222,11 +223,11 @@ namespace CKKS_Agent_System.Service
                 }
             }
 
-            // 确定验证码发送成功后，存入 Redis 并设置过期时间（5 分钟）
-            await VerifyCodeHelper.SaveCodeAsync(_cache, target, code, SendCodeAction.Register.ToString());
+            // 确定验证码发送成功后，按配置的有效期存入 Redis
+            await VerifyCodeHelper.SaveCodeAsync(_cache, target, code, SendCodeAction.Register.ToString(), _verificationSetting.CodeExpirationMinutes);
 
-            // 写入防刷冷却锁，60秒过期
-            var options = new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(60) };
+            // 按配置的时间写入防刷冷却锁
+            var options = new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(_verificationSetting.CooldownSeconds) };
             await _cache.SetStringAsync(cooldownKey, "1", options);
 
             return new ApiResponse 
@@ -600,7 +601,7 @@ namespace CKKS_Agent_System.Service
                 return new ApiResponse
                 {
                     Success = false,
-                    Message = "发送过于频繁，请 1 分钟后再试",
+                    Message = $"发送过于频繁，请 {_verificationSetting.CooldownSeconds} 秒后再试",
                     Code = ResponseCode.TooManyVerifyCode
                 };
             }
@@ -638,10 +639,10 @@ namespace CKKS_Agent_System.Service
             }
 
             // 将验证码写入 Redis 并设置过期时间
-            await VerifyCodeHelper.SaveCodeAsync(_cache, normalizedTarget, code, SendCodeAction.ResetPassword.ToString());
+            await VerifyCodeHelper.SaveCodeAsync(_cache, normalizedTarget, code, SendCodeAction.ResetPassword.ToString(), _verificationSetting.CodeExpirationMinutes);
 
             // 设置冷却锁
-            var options = new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(60) };
+            var options = new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(_verificationSetting.CooldownSeconds) };
             await _cache.SetStringAsync(cooldownKey, "1", options);
 
             return new ApiResponse
@@ -787,10 +788,6 @@ namespace CKKS_Agent_System.Service
             }
         }
 
-        // 用户修改绑定邮箱
-
-        // 用户修改绑定手机号
-
         // 单独绑定邮箱验证码发送
         public async Task<ApiResponse> SendBindEmailCodeAsync(SendCodeRequest request, long userId)
         {
@@ -858,7 +855,7 @@ namespace CKKS_Agent_System.Service
                 return new ApiResponse
                 {
                     Success = false,
-                    Message = "发送过于频繁，请 1 分钟后再试",
+                    Message = $"发送过于频繁，请 {_verificationSetting.CooldownSeconds} 秒后再试",
                     Code = ResponseCode.TooManyVerifyCode
                 };
             }
@@ -878,12 +875,12 @@ namespace CKKS_Agent_System.Service
                 };
             }
 
-            // 将验证码写入 Redis 并设置过期时间 5 min
+            // 按配置的有效期将验证码写入 Redis
             var codeKeyTarget = $"{userId}:{target}";
-            await VerifyCodeHelper.SaveCodeAsync(_cache, codeKeyTarget, code, SendCodeAction.BindEmail.ToString());
+            await VerifyCodeHelper.SaveCodeAsync(_cache, codeKeyTarget, code, SendCodeAction.BindEmail.ToString(), _verificationSetting.CodeExpirationMinutes);
 
-            // 写入防刷冷却锁，60秒过期
-            var options = new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(60) };
+            // 按配置的时间写入防刷冷却锁
+            var options = new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(_verificationSetting.CooldownSeconds) };
             await _cache.SetStringAsync(cooldownKey, "1", options);
 
             return new ApiResponse
@@ -1063,7 +1060,7 @@ namespace CKKS_Agent_System.Service
                 return new ApiResponse
                 {
                     Success = false,
-                    Message = "发送过于频繁，请 1 分钟后再试",
+                    Message = $"发送过于频繁，请 {_verificationSetting.CooldownSeconds} 秒后再试",
                     Code = ResponseCode.TooManyVerifyCode
                 };
             }
@@ -1083,12 +1080,12 @@ namespace CKKS_Agent_System.Service
                 };
             }
 
-            // 将验证码写入 Redis 并设置过期时间 5 min
+            // 按配置的有效期将验证码写入 Redis
             var codeKeyTarget = $"{userId}:{target}";
-            await VerifyCodeHelper.SaveCodeAsync(_cache, codeKeyTarget, code, SendCodeAction.BindPhoneNumber.ToString());
+            await VerifyCodeHelper.SaveCodeAsync(_cache, codeKeyTarget, code, SendCodeAction.BindPhoneNumber.ToString(), _verificationSetting.CodeExpirationMinutes);
 
-            // 写入防刷冷却锁，60秒过期
-            var options = new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(60) };
+            // 按配置的时间写入防刷冷却锁
+            var options = new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(_verificationSetting.CooldownSeconds) };
             await _cache.SetStringAsync(cooldownKey, "1", options);
 
             return new ApiResponse
@@ -1201,6 +1198,582 @@ namespace CKKS_Agent_System.Service
             };
         }
 
+        // 用户换绑进行身份认证时发送验证码
+        public async Task<ApiResponse> SendResetIdentityAuthCodeAsync(SendResetIndentiyAuthCodeRequest request, long userId)
+        {
+            if (request.Action != SendCodeAction.ResetAuthByEmail && request.Action != SendCodeAction.ResetAuthByPhoneNumber)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "不支持的验证行为",
+                    Code = ResponseCode.UnsupportedVerifyType
+                };
+            }
+
+            // 校验用户存在性
+            var currentUser = await _userRepository.GetUserByIdAsync(userId);
+            if (currentUser == null)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "未能找到当前用户，请稍后重试",
+                    Code = ResponseCode.UserNotFound
+                };
+            }
+
+            // 校验请求体携带凭证类型是否可用后发送验证码
+            if (request.Action == SendCodeAction.ResetAuthByEmail)
+            {
+                if (!currentUser.IsEmailVerified || string.IsNullOrWhiteSpace(currentUser.Email))
+                {
+                    return new ApiResponse
+                    {
+                        Success = false,
+                        Message = "当前用户不存在可用的邮箱，请先尝试绑定",
+                        Code = ResponseCode.InvalidCredentials
+                    };
+                }
+
+                // 检查是否存在冷却锁
+                var cooldownKey = $"VerifyCode:Cooldown:ChangeIdentity:Auth:{request.Action}:{userId}";
+                if (await _cache.GetStringAsync(cooldownKey) != null)
+                {
+                    return new ApiResponse
+                    {
+                        Success = false,
+                        Message = $"发送过于频繁，请 {_verificationSetting.CooldownSeconds} 秒后再试",
+                        Code = ResponseCode.TooManyVerifyCode
+                    };
+                }
+
+                // 发送验证码到目标邮箱
+                var code = VerifyCodeHelper.GenerateCode();
+                var sendSuccess = await SendVerifyCodeByEmailAsync(currentUser.Email, code, request.Action);
+                if (!sendSuccess)
+                {
+                    return new ApiResponse
+                    {
+                        Success = false,
+                        Message = "邮件发送失败",
+                        Code = ResponseCode.InternalError
+                    };
+                }
+
+                // 按配置的有效期将验证码写入 Redis
+                await VerifyCodeHelper.SaveCodeAsync(_cache, currentUser.Email, code, request.Action.ToString(), _verificationSetting.CodeExpirationMinutes);
+
+                // 按配置的时间写入防刷冷却锁
+                var options = new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(_verificationSetting.CooldownSeconds) };
+                await _cache.SetStringAsync(cooldownKey, "1", options);
+
+                return new ApiResponse
+                {
+                    Success = true,
+                    Message = "验证码发送成功",
+                    Code = ResponseCode.Success
+                };
+            }
+            else
+            {
+                if (!currentUser.IsPhoneNumberVerified || string.IsNullOrWhiteSpace(currentUser.PhoneNumber))
+                {
+                    return new ApiResponse
+                    {
+                        Success = false,
+                        Message = "当前用户不存在可用的手机号码，请先尝试绑定",
+                        Code = ResponseCode.InvalidCredentials
+                    };
+                }
+
+                // 检查冷却锁
+                var cooldownKey = $"VerifyCode:Cooldown:ChangeIdentity:Auth:{request.Action}:{userId}";
+                if (await _cache.GetStringAsync(cooldownKey) != null)
+                {
+                    return new ApiResponse
+                    {
+                        Success = false,
+                        Message = $"发送过于频繁，请 {_verificationSetting.CooldownSeconds} 秒后再试",
+                        Code = ResponseCode.TooManyVerifyCode
+                    };
+                }
+
+                // 生成验证码
+                var code = VerifyCodeHelper.GenerateCode();
+
+                // 发送验证码
+                bool sendSuccess = await SendVerifyCodeByPhoneNumberAsync(currentUser.PhoneNumber, code);
+                if (!sendSuccess)
+                {
+                    return new ApiResponse
+                    {
+                        Success = false,
+                        Message = "验证码短信发送失败",
+                        Code = ResponseCode.InternalError
+                    };
+                }
+
+                // 按配置的有效期将验证码写入 Redis
+                await VerifyCodeHelper.SaveCodeAsync(_cache, currentUser.PhoneNumber, code, request.Action.ToString(), _verificationSetting.CodeExpirationMinutes);
+
+                // 按配置的时间写入防刷冷却锁
+                var options = new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(_verificationSetting.CooldownSeconds) };
+                await _cache.SetStringAsync(cooldownKey, "1", options);
+
+                return new ApiResponse
+                {
+                    Success = true,
+                    Message = "验证码发送成功",
+                    Code = ResponseCode.Success
+                };
+            }
+        }
+
+        // 用户换绑时身份认证校验
+        public async Task<ApiResponse> ResetIdentityAuthAsync(ResetIndentiyAuthRequest request, long userId)
+        {
+            // 校验用户存在性
+            var currentUser = await _userRepository.GetUserByIdAsync(userId);
+            if (currentUser == null)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "未能找到当前用户",
+                    Code = ResponseCode.UserNotFound
+                };
+            }
+
+            // 校验请求体合规性
+            if (request.Channel != VerifyType.Email && request.Channel != VerifyType.PhoneNumber)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "不存在的换绑选项，请重试！",
+                    Code = ResponseCode.BadRequest
+                };
+            }
+
+            if (request.Method != ResetMethod.Email &&
+                request.Method != ResetMethod.Password &&
+                request.Method != ResetMethod.PhoneNumber)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "不合法的用户认证方式，请重试",
+                    Code = ResponseCode.InvalidCredentials
+                };
+            }
+            else if (request.Method == ResetMethod.Email || request.Method == ResetMethod.PhoneNumber)
+            {
+                if (string.IsNullOrWhiteSpace(request.VerifyCode))
+                {
+                    return new ApiResponse
+                    {
+                        Success = false,
+                        Message = "该种认证方式需要验证码，请输入验证码！",
+                        Code = ResponseCode.BadRequest
+                    };
+                }
+
+                // 请求体合规，进入后续验证码校验环节
+                string? target;
+                if (request.Method == ResetMethod.Email)
+                {
+                    if (!currentUser.IsEmailVerified || string.IsNullOrWhiteSpace(currentUser.Email))
+                    {
+                        return new ApiResponse
+                        {
+                            Success = false,
+                            Message = "该验证方式无效，请先尝试绑定",
+                            Code = ResponseCode.InvalidCredentials
+                        };
+                    }
+                    target = currentUser.Email;
+                }
+                else
+                {
+                    if (!currentUser.IsPhoneNumberVerified || string.IsNullOrWhiteSpace(currentUser.PhoneNumber))
+                    {
+                        return new ApiResponse
+                        {
+                            Success = false,
+                            Message = "该验证方式无效，请先尝试绑定",
+                            Code = ResponseCode.InvalidCredentials
+                        };
+                    }
+                    target = currentUser.PhoneNumber;
+                }
+                var action = request.Method == ResetMethod.Email ? SendCodeAction.ResetAuthByEmail : SendCodeAction.ResetAuthByPhoneNumber;
+                var verifySuccess = await VerifyCodeHelper.ValidateCodeAsync(_cache, target, request.VerifyCode, action.ToString());
+                if (!verifySuccess)
+                {
+                    return new ApiResponse
+                    {
+                        Success = false,
+                        Message = "验证码输入错误，请重新输入！",
+                        Code = ResponseCode.BadRequest
+                    };
+                }
+
+                // 身份认证成功，签发 Permit Key，保存到 Redis
+                var permitKey = GetResetPermitKey(request.Channel, userId);
+                var options = new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(_verificationSetting.ChangePermitMinutes) };
+                await _cache.SetStringAsync(permitKey, "1", options);
+
+                return new ApiResponse
+                {
+                    Success = true,
+                    Message = "用户身份认证成功！",
+                    Code = ResponseCode.Success
+                };
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(request.Password))
+                {
+                    return new ApiResponse
+                    {
+                        Success = false,
+                        Message = "该种认证方式需要密码，请输入密码！",
+                        Code = ResponseCode.BadRequest
+                    };
+                }
+
+                if (PasswordHelper.VerifyPassword(request.Password, currentUser.PasswordHash))
+                {
+                    // 身份认证成功，签发 Permit Key，保存到 Redis
+                    var permitKey = GetResetPermitKey(request.Channel, userId);
+                    var options = new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(_verificationSetting.ChangePermitMinutes) };
+                    await _cache.SetStringAsync(permitKey, "1", options);
+
+                    return new ApiResponse
+                    {
+                        Success = true,
+                        Message = "用户身份认证成功",
+                        Code = ResponseCode.Success
+                    };
+                }
+                else
+                {
+                    return new ApiResponse
+                    {
+                        Success = false,
+                        Message = "密码输入错误！",
+                        Code = ResponseCode.BadRequest
+                    };
+                }
+            }
+        }
+
+        // 用户换绑时发送验证码
+        public async Task<ApiResponse> SendResetIdentityCodeAsync(SendCodeRequest request, long userId)
+        {
+            // 校验请求体合法性
+            if (request.Type != VerifyType.Email && request.Type != VerifyType.PhoneNumber)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "不支持的换绑类型，请重试",
+                    Code = ResponseCode.UnsupportedVerifyType
+                };
+            }
+
+            var target = VerificationTargetHelper.Normalize(request.Type, request.Target);
+            if (string.IsNullOrWhiteSpace(target))
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "绑定不能为空！",
+                    Code = ResponseCode.BadRequest
+                };
+            }
+
+            // 校验用户存在性
+            var currentUser = await _userRepository.GetUserByIdAsync(userId);
+            if (currentUser == null)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "当前用户不存在！",
+                    Code = ResponseCode.UserNotFound
+                };
+            }
+
+            // 检查换绑前是否有对应 Target
+            if (!IsTargetTypeBound(currentUser, request.Type))
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = $"当前还未绑定{GetTypeString(request.Type)}，请先尝试绑定",
+                    Code = ResponseCode.BadRequest
+                };
+            }
+
+            // 检查换绑前后是否相同
+            var oldTarget = request.Type == VerifyType.Email ? currentUser.Email : currentUser.PhoneNumber;
+            if (string.Compare(oldTarget, target) == 0)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = $"不能换绑相同的{GetTypeString(request.Type)}！",
+                    Code = ResponseCode.Conflict
+                };
+            }
+
+            // 检查新的 Target 是否已在库中
+            if (request.Type == VerifyType.Email)
+            {
+                var existingUser = await _userRepository.GetUserByEmailAsync(target);
+                if (existingUser != null)
+                {
+                    return new ApiResponse
+                    {
+                        Success = false,
+                        Message = "该邮箱已被人使用",
+                        Code = ResponseCode.Conflict
+                    };
+                }
+            }
+            else
+            {
+                var existingUser = await _userRepository.GetUserByPhoneNumberAsync(target);
+                if (existingUser != null)
+                {
+                    return new ApiResponse
+                    {
+                        Success = false,
+                        Message = "该手机号码已被人使用",
+                        Code = ResponseCode.Conflict
+                    };
+                }
+            }
+
+            // 校验 Permit Key 的存在
+            var permitKey = GetResetPermitKey(request.Type, userId);
+            if (await _cache.GetStringAsync(permitKey) == null)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "身份校验已过期，请先重新验证身份",
+                    Code = ResponseCode.Unauthorized
+                };
+            }
+
+            // 创建并检查冷却锁是否已存在
+            var cooldownKey = $"VerifyCode:Cooldown:ResetNew:{request.Type}:{userId}:{target}";
+            if (await _cache.GetStringAsync(cooldownKey) != null)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = $"发送过于频繁，请 {_verificationSetting.CooldownSeconds} 秒后再试",
+                    Code = ResponseCode.TooManyVerifyCode
+                };
+            }
+
+            // 生成、发送验证码
+            var code = VerifyCodeHelper.GenerateCode();
+            var action = request.Type == VerifyType.Email ? SendCodeAction.ResetEmail : SendCodeAction.ResetPhoneNumber;
+
+            bool sendSuccess = request.Type == VerifyType.Email
+                ? await SendVerifyCodeByEmailAsync(target, code, action)
+                : await SendVerifyCodeByPhoneNumberAsync(target, code);
+
+            if (!sendSuccess)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = request.Type == VerifyType.Email ? "邮件发送失败" : "短信发送失败",
+                    Code = ResponseCode.InternalError
+                };
+            }
+
+            // 将生成的验证码保存到 Redis
+            var codeKeyTarget = $"{userId}:{target}";
+            await VerifyCodeHelper.SaveCodeAsync(_cache, codeKeyTarget, code, action.ToString(), _verificationSetting.CodeExpirationMinutes);
+
+            var options = new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(_verificationSetting.CooldownSeconds) };
+            await _cache.SetStringAsync(cooldownKey, "1", options);
+
+            return new ApiResponse
+            {
+                Success = true,
+                Message = "验证码发送成功",
+                Code = ResponseCode.Success
+            };
+        }
+
+        // 用户换绑时进行验证
+        public async Task<ApiResponse> ResetIdentityAsync(ResetIdentityRequest request, long userId)
+        {
+            if (request.Type != VerifyType.Email && request.Type != VerifyType.PhoneNumber)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "不支持的验证类型",
+                    Code = ResponseCode.UnsupportedVerifyType
+                };
+            }
+
+            var currentUser = await _userRepository.GetUserByIdAsync(userId);
+            if (currentUser == null)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "当前用户不存在，请重新登录试试",
+                    Code = ResponseCode.UserNotFound
+                };
+            }
+
+            var typeName = GetTypeString(request.Type);
+            if (!IsTargetTypeBound(currentUser, request.Type))
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = $"您当前没有绑定有效的{typeName}，无法换绑",
+                    Code = ResponseCode.Conflict
+                };
+            }
+
+            string? oldTarget = request.Type == VerifyType.Email ? currentUser.Email : currentUser.PhoneNumber;
+
+            var newTarget = request.Type == VerifyType.Email
+                ? VerificationTargetHelper.NormalizeEmail(request.Target)
+                : VerificationTargetHelper.NormalizePhoneNumber(request.Target);
+
+            if (string.IsNullOrWhiteSpace(newTarget))
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = $"请输入有效的新{typeName}",
+                    Code = ResponseCode.BadRequest
+                };
+            }
+
+            // permit 必须存在
+            var permitKey = GetResetPermitKey(request.Type, userId);
+            if (await _cache.GetStringAsync(permitKey) == null)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "身份校验已过期，请重新验证身份",
+                    Code = ResponseCode.Unauthorized
+                };
+            }
+
+            if (string.Equals(newTarget, oldTarget, StringComparison.OrdinalIgnoreCase))
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = $"新{typeName}不能与当前绑定{typeName}相同",
+                    Code = ResponseCode.BadRequest
+                };
+            }
+
+            var existingUser = request.Type == VerifyType.Email
+                ? await _userRepository.GetUserByEmailAsync(newTarget)
+                : await _userRepository.GetUserByPhoneNumberAsync(newTarget);
+
+            if (existingUser != null && existingUser.UserId != userId)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = $"该{typeName}已被其它用户绑定了",
+                    Code = ResponseCode.Conflict
+                };
+            }
+
+            // 校验新联系方式验证码
+            var codeKeyTarget = $"{userId}:{newTarget}";
+            var action = request.Type == VerifyType.Email ? SendCodeAction.ResetEmail : SendCodeAction.ResetPhoneNumber;
+            var verifiedSuccess = await VerifyCodeHelper.ValidateCodeAsync(
+                _cache, codeKeyTarget, request.VerifyCode, action.ToString());
+
+            if (!verifiedSuccess)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "验证码错误或已过期",
+                    Code = ResponseCode.InvalidVerificationCode
+                };
+            }
+
+            // 落库
+            try
+            {
+                if (request.Type == VerifyType.Email)
+                {
+                    currentUser.Email = newTarget;
+                    currentUser.IsEmailVerified = true;
+                }
+                else
+                {
+                    currentUser.PhoneNumber = newTarget;
+                    currentUser.IsPhoneNumberVerified = true;
+                }
+
+                if (!await _userRepository.UpdateUserAsync(currentUser))
+                {
+                    return new ApiResponse
+                    {
+                        Success = false,
+                        Message = "在保存的过程中出错了",
+                        Code = ResponseCode.DatabaseError
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "换绑{Type}失败。UserId={UserId}", typeName, userId);
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "在保存的过程中出错了",
+                    Code = ResponseCode.DatabaseError
+                };
+            }
+
+            await _cache.RemoveAsync(permitKey);
+
+            try
+            {
+                if (!await _tokenService.RevokeAllRefreshToken(userId))
+                {
+                    _logger.LogError("换绑{Type}后撤销 token 失败。UserId={UserId}", typeName, userId);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "换绑{Type}后撤销 token 异常。UserId={UserId}", typeName, userId);
+            }
+
+            return new ApiResponse
+            {
+                Success = true,
+                Message = $"{typeName}换绑成功，请重新登录",
+                Code = ResponseCode.Success
+            };
+        }
+
         // ============== 以下是私有工具方法 ==============
 
         // 验证密码是否匹配
@@ -1221,12 +1794,14 @@ namespace CKKS_Agent_System.Service
                 SendCodeAction.ResetPhoneNumber => ("【CKKS Agent System】更换手机号验证码", "email-reset-phone.html"),
                 SendCodeAction.BindEmail => ("【CKKS Agent System】绑定邮箱验证码", "email-bind-email.html"),
                 SendCodeAction.BindPhoneNumber => ("【CKKS Agent System】绑定手机号验证码", "email-bind-phone.html"),
+                SendCodeAction.ResetAuthByEmail => ("【CKKS Agent System】换绑身份验证验证码", "email-reset-auth.html"),
                 _ => throw new NotSupportedException($"不支持的验证码场景：{action}")
             };
 
             var variables = new Dictionary<string, string>
             {
-                { "CODE", code } // 对应模板里的 {{CODE}}
+                { "CODE", code },
+                { "EXPIRE_MINUTES", _verificationSetting.CodeExpirationMinutes.ToString() }
             };
 
             try
@@ -1272,6 +1847,38 @@ namespace CKKS_Agent_System.Service
                     // 忽略删除失败的情况
                 }
             }
+        }
+
+        // 构造 Permit Key
+        private static string GetResetPermitKey(VerifyType targetType, long userId)
+        {
+            return targetType == VerifyType.Email ? $"ChangeEmail:Permit:{userId}" : $"ChangePhone:Permit:{userId}";
+        }
+
+        // 根据不同的类型构造信息字符串
+        private string GetTypeString(VerifyType type)
+        {
+            return type == VerifyType.Email ? "邮箱" : "电话号码";
+        }
+
+        // 判断用户是否成功绑定了某种类型的联系方式
+        private bool IsTargetTypeBound(User user, VerifyType type)
+        {
+            if (type == VerifyType.Email)
+            {
+                if (user.IsEmailVerified && !string.IsNullOrWhiteSpace(user.Email))
+                {
+                    return true;
+                }
+            }
+            else
+            {
+                if (user.IsPhoneNumberVerified && !string.IsNullOrWhiteSpace(user.PhoneNumber))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 }

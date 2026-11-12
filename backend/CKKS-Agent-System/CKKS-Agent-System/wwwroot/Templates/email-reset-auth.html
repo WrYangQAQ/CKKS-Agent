@@ -1,0 +1,29 @@
+﻿﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>重置绑定身份认证验证码</title>
+</head>
+<body style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #f4f4f5; padding: 20px;">
+    <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; padding: 30px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+        <h2 style="color: #333333; margin-bottom: 20px;">您好！</h2>
+        <p style="color: #555555; font-size: 16px; line-height: 1.5;">
+            您正在重置 <strong>CKKS Agent System</strong> 账户的绑定邮箱/手机号，为完成身份认证，您的验证码如下：
+        </p>
+
+        <div style="margin: 30px 0; text-align: center;">
+            <span style="font-size: 32px; font-weight: bold; color: #007bff; letter-spacing: 6px; background-color: #f0f7ff; padding: 10px 20px; border-radius: 6px;">
+                {{CODE}}
+            </span>
+        </div>
+
+        <p style="color: #999999; font-size: 14px;">
+            该验证码 <strong>{{EXPIRE_MINUTES}} 分钟</strong>内有效。<strong>如非本人操作，请忽略此邮件并检查账户安全，或联系管理员。</strong>
+        </p>
+        <hr style="border: none; border-top: 1px solid #eeeeee; margin: 20px 0;" />
+        <p style="color: #aaaaaa; font-size: 12px; text-align: center;">
+            &copy; 2026 CKKS Agent System. All rights reserved.
+        </p>
+    </div>
+</body>
+</html>
