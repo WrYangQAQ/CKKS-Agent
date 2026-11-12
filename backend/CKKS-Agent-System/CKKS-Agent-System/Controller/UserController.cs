@@ -107,6 +107,26 @@ namespace CKKS_Agent_System.Controller
             return ReturnResponse(response);
         }
 
+        // 单独绑定邮箱验证码发送接口
+        [Authorize]
+        [HttpPost("bind-email/send-code")]
+        public async Task<IActionResult> SendBindEmailCodeAsync([FromBody] SendCodeRequest request)
+        {
+            var userId = GetUserIdFromClaims();
+            var response = await _userService.SendBindEmailCodeAsync(request, userId);
+            return ReturnResponse(response);
+        }
+
+        // 绑定邮箱接口
+        [Authorize]
+        [HttpPost("bind-email")]
+        public async Task<IActionResult> BindEmailAsync([FromBody] BindEmailRequest request)
+        {
+            long userId = GetUserIdFromClaims();
+            var response = await _userService.BindEmailAsync(request, userId);
+            return ReturnResponse(response);
+        }
+
         // ==============  以下是私有工具方法  ==============
         private long GetUserIdFromClaims()
         {

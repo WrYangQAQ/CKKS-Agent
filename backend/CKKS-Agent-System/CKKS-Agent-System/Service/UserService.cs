@@ -7,9 +7,7 @@ using CKKS_Agent_System.Helper;
 using CKKS_Agent_System.Repository;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Options;
-using Org.BouncyCastle.Asn1.Ocsp;
 using Org.BouncyCastle.Asn1.X509;
-using System.Security;
 
 namespace CKKS_Agent_System.Service
 {
@@ -595,7 +593,7 @@ namespace CKKS_Agent_System.Service
             }
 
             // 构建冷却锁的 Key 并检查 Redis 里是否已经有了对应 Value
-            var cooldownKey = $"VerifyCode:Cooldown:{SendCodeAction.ResetPassword.ToString()}:{normalizedTarget}";
+            var cooldownKey = $"VerifyCode:Cooldown:{SendCodeAction.ResetPassword.ToString()}:{currentUser.UserId}:{normalizedTarget}";
 
             if (await _cache.GetStringAsync(cooldownKey) != null)
             {
@@ -793,7 +791,210 @@ namespace CKKS_Agent_System.Service
 
         // 用户修改绑定手机号
 
+        // 单独绑定邮箱验证码发送
+        public async Task<ApiResponse> SendBindEmailCodeAsync(SendCodeRequest request, long userId)
+        {
+            // 校验请求类型
+            if (request.Type != VerifyType.Email)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "您正在访问错误的接口，请重试",
+                    Code = ResponseCode.UnsupportedVerifyType
+                };
+            }
+
+            // 校验用户存在
+            var currentUser = await _userRepository.GetUserByIdAsync(userId);
+            if (currentUser == null)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "当前用户不存在，请重新登录试试",
+                    Code = ResponseCode.UserNotFound
+                };
+            }
+
+            // 校验用户邮箱是否有空位
+            if (currentUser.IsEmailVerified || currentUser.Email != null)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "当前用户已经绑定了一个邮箱",
+                    Code = ResponseCode.Conflict
+                };
+            }
+
+            var target = VerificationTargetHelper.Normalize(request.Type, request.Target);
+            if (target == null)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "请输入您想要绑定的邮箱",
+                    Code = ResponseCode.BadRequest
+                };
+            }
+
+            // 校验目标邮箱是否已被其它用户占用
+            var existingUser = await _userRepository.GetUserByEmailAsync(target);
+            if (existingUser != null)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "该邮箱已被其它用户绑定了",
+                    Code = ResponseCode.Conflict
+                };
+            }
+
+            // 检查冷却锁
+            var cooldownKey = $"VerifyCode:Cooldown:{SendCodeAction.BindEmail.ToString()}:{currentUser.UserId}:{target}";
+            if (await _cache.GetStringAsync(cooldownKey) != null)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "发送过于频繁，请 1 分钟后再试",
+                    Code = ResponseCode.TooManyVerifyCode
+                };
+            }
+
+            // 生成验证码
+            var code = VerifyCodeHelper.GenerateCode();
+
+            // 发送验证码
+            bool sendSuccess = await SendVerifyCodeByEmailAsync(target, code, SendCodeAction.BindEmail);
+            if (!sendSuccess)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "邮件发送失败",
+                    Code = ResponseCode.InternalError
+                };
+            }
+
+            // 将验证码写入 Redis 并设置过期时间 5 min
+            var codeKeyTarget = $"{userId}:{target}";
+            await VerifyCodeHelper.SaveCodeAsync(_cache, codeKeyTarget, code, SendCodeAction.BindEmail.ToString());
+
+            // 写入防刷冷却锁，60秒过期
+            var options = new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(60) };
+            await _cache.SetStringAsync(cooldownKey, "1", options);
+
+            return new ApiResponse
+            {
+                Success = true,
+                Message = "验证码发送成功",
+                Code = ResponseCode.Success
+            };
+        }
+
         // 未绑定邮箱用户绑定邮箱（单独绑定）
+        public async Task<ApiResponse> BindEmailAsync(BindEmailRequest request, long userId)
+        {
+            var target = VerificationTargetHelper.NormalizeEmail(request.Email);
+            if (target == null)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "请输入您想要绑定的邮箱",
+                    Code = ResponseCode.BadRequest
+                };
+            }
+
+            // 校验用户存在
+            var currentUser = await _userRepository.GetUserByIdAsync(userId);
+            if (currentUser == null)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "当前用户不存在，请重新登录试试",
+                    Code = ResponseCode.UserNotFound
+                };
+            }
+
+            // 校验用户邮箱是否有空位
+            if (currentUser.IsEmailVerified || currentUser.Email != null)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "当前用户已经绑定了一个邮箱",
+                    Code = ResponseCode.Conflict
+                };
+            }
+
+            // 校验目标邮箱是否已被其它用户占用
+            var existingUser = await _userRepository.GetUserByEmailAsync(target);
+            if (existingUser != null)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "该邮箱已被其它用户绑定了",
+                    Code = ResponseCode.Conflict
+                };
+            }
+
+            // 校验验证码是否正确
+            var codeKeyTarget = $"{userId}:{target}";
+            var verifiedSuccess = await VerifyCodeHelper.ValidateCodeAsync(
+                _cache,
+                codeKeyTarget,
+                request.VerificationCode,
+                SendCodeAction.BindEmail.ToString());
+
+            if (!verifiedSuccess)
+            {
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "验证码错误或已过期",
+                    Code = ResponseCode.InvalidVerificationCode
+                };
+            }
+
+            // 将新邮箱入库保存
+            try
+            {
+                currentUser.Email = target;
+                currentUser.IsEmailVerified = true;
+                bool updateSuccess = await _userRepository.UpdateUserAsync(currentUser);
+                if (!updateSuccess)
+                {
+                    return new ApiResponse
+                    {
+                        Success = false,
+                        Message = "在保存的过程中出错了",
+                        Code = ResponseCode.DatabaseError
+                    };
+                }
+            }
+            catch(Exception ex)
+            {
+                _logger.LogError(ex, "保存邮箱失败。UserId={UserId}", userId);
+                return new ApiResponse
+                {
+                    Success = false,
+                    Message = "在保存的过程中出错了",
+                    Code = ResponseCode.DatabaseError
+                };
+            }
+
+            return new ApiResponse
+            {
+                Success = true,
+                Message = "邮箱绑定成功",
+                Code = ResponseCode.Success
+            };
+        }
 
         // 未绑定手机号用户绑定手机号（单独绑定）
 
